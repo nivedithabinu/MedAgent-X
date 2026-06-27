@@ -1,6 +1,6 @@
 /** APPLICATION STATE **/
 const AppState = {
-    backendUrl: 'http://127.0.0.1:8000',
+    backendUrl: 'https://medagent-x.onrender.com/',
     documents: [], // { id, name, file, arrayBuffer, mindmapCode, pptData }
     activeDocId: null,
     pdfDoc: null,
