@@ -25,6 +25,10 @@ app.add_middleware(
 
 api_key = os.getenv("GEMINI_API_KEY")
 
+print("API KEY PREFIX:", api_key[:10] 
+      if api_key 
+      else "None")
+
 if api_key and api_key != "your_api_key_here":
     print(f"✅ SUCCESS: API Key loaded correctly!")
 else:
