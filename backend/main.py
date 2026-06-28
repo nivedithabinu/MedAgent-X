@@ -2,6 +2,9 @@ import os
 import json
 import io
 import antigravity
+import google.genai
+
+print("google-genai version:", google.genai.__version__)
 
 from fastapi import FastAPI, UploadFile, File, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
