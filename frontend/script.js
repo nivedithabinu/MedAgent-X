@@ -420,7 +420,7 @@ async function renderPpt(forceRegenerate = false) {
         showOverlay("Distilling key findings...\nGenerating Presentation Deck...");
 
         try {
-            cconst context = doc.pages.map(page => `[Page ${page.page}]\n${page.text}`).join("\n\n");
+            const context = doc.pages.map(page => `[Page ${page.page}]\n${page.text}`).join("\n\n");
             
             const res = await fetch(`${AppState.backendUrl}/api/generate-ppt`, {
                 method: "POST",
