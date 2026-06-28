@@ -192,7 +192,7 @@ DOM.fileUpload.addEventListener('change', async (e) => {
             });
 
             if (!res.ok) {
-                const errorText = await res.json();
+                const errorText = await res.json().catch(() => ({}));
                 throw new Error(errorText.detail || "Failed to upload document");
             }
 
