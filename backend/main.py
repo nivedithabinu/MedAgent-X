@@ -32,19 +32,15 @@ class ContextRequest(BaseModel):
 # Globally configure the Gemini API key safely
 api_key = os.getenv("GEMINI_API_KEY")
 if api_key:
-    # 1. Clean the key (Render sometimes includes accidental quotes)
     clean_key = api_key.replace('"', '').replace("'", "").strip()
-    # 2. Force 'rest' transport to bypass the gRPC OAuth glitch!
     genai.configure(api_key=clean_key, transport="rest")
 
 def generate_with_retry(prompt, instruction, response_mime_type="text/plain"):
     if not api_key:
         raise ValueError("GEMINI_API_KEY is missing in Render environment.")
-    
-    # Using classic GenerativeModel which prevents the OAuth token bug
+
     model = genai.GenerativeModel('gemini-2.5-flash')
-    
-    # Embed instruction directly into the prompt to guarantee it works on any SDK version
+
     full_prompt = f"System Instruction: {instruction}\n\nTask: {prompt}"
     if response_mime_type == "application/json":
         full_prompt += "\n\nCRITICAL: You MUST output ONLY valid JSON format."
