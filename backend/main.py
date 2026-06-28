@@ -142,18 +142,23 @@ async def chat_with_agent(req: QueryRequest, x_gemini_key: str = Header(None)):
 
 @app.post("/api/generate-graph")
 async def generate_graph(req: ContextRequest, x_gemini_key: str = Header(None)):
-   prompt = f"""
-    You are an expert medical knowledge graph generator.
-    Analyze the medical document and produce ONLY a valid Mermaid mindmap.
-    
-    STRICT RULES:
-    - Output ONLY Mermaid code.
-    - Do NOT explain anything.
-    - Do NOT wrap the response in ``` blocks.
-    - The first line MUST be exactly: mindmap
-    - Use this structure:
-    
-    mindmap
+    prompt = f"""
+You are an expert medical knowledge graph generator.
+
+Analyze the following medical document and produce ONLY valid Mermaid mindmap code.
+
+STRICT RULES:
+
+- Output ONLY Mermaid code.
+- Do NOT explain anything.
+- Do NOT use markdown code blocks.
+- The first line MUST be exactly:
+
+mindmap
+
+- Follow this structure exactly:
+
+mindmap
   root((Main Disease))
     Symptoms
       Symptom 1
@@ -172,26 +177,44 @@ async def generate_graph(req: ContextRequest, x_gemini_key: str = Header(None)):
     Complications
       Complication 1
 
-Keep node labels short.
-Never use special characters like :, (), [], {{}} inside labels except the root node.
-Maximum depth: 3.
+Rules:
+- Keep node labels short.
+- Maximum depth = 3.
+- Never output anything except Mermaid.
 
 Medical Document:
 
 {req.context}
 """
     try:
-        model = get_gemini_model(x_gemini_key, "You are a medical data structurer. Output ONLY valid mermaid mindmap code.")
+        model = get_gemini_model(
+            x_gemini_key,
+            "You are a medical data structurer. Output ONLY valid Mermaid mindmap code."
+        )
+
         response = model.generate_content(prompt)
 
-        mermaid_code = (response.text.replace("```mermaid", "").replace("```", "").replace("\r", "").strip())
-        
+        mermaid_code = (
+            response.text
+            .replace("```mermaid", "")
+            .replace("```", "")
+            .replace("\r", "")
+            .strip()
+        )
+
         if not mermaid_code.startswith("mindmap"):
             mermaid_code = "mindmap\n" + mermaid_code
-        
-        return {"mermaid_code": mermaid_code}
+
+        print("========== MERMAID ==========")
+        print(mermaid_code)
+        print("=============================")
+
+        return {
+            "mermaid_code": mermaid_code
+        }
 
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/api/generate-ppt")
