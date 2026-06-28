@@ -102,19 +102,7 @@ async def upload_pdf(file: UploadFile = File(...), x_gemini_key: str = Header(No
     first_page_text = pages_data[0]["text"][:500]
     prompt = f"Analyze this text snippet: \"{first_page_text}\". Is this document highly likely related to the Medical, Health, or Biological sciences industry? Reply with exactly YES or NO."
     
-    try:
-        model = get_gemini_model(x_gemini_key, "You are a strict medical classifier.")
-        response = model.generate_content(prompt)
-
-        if response.text.strip().upper() != "YES":
-            raise HTTPException(status_code=403, detail="Document rejected: Not a medical document.")
-
-    except Exception as e:
-        print("========== GEMINI ERROR ==========")
-        traceback.print_exc()
-        print("==================================")
-        
-        raise HTTPException(status_code=500, detail=str(e))
+    pass
 
     return {
         "filename": file.filename, 
