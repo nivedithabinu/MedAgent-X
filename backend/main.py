@@ -5,6 +5,7 @@ import antigravity
 import google.genai
 import traceback
 import re
+import time
 
 print("google-genai version:", google.genai.__version__)
 
@@ -240,7 +241,22 @@ async def generate_ppt(req: ContextRequest, x_gemini_key: str = Header(None)):
     """
     try:
         model = get_gemini_model(x_gemini_key, "You are a medical presenter. Output strictly a JSON array.", response_mime_type="application/json")
-        response = model.generate_content(prompt)
+        response = None
+
+        for attempt in range(5):
+           try:
+              response = model.generate_content(prompt)
+              break
+    
+           except Exception as e:
+               if "503" in str(e) or "UNAVAILABLE" in str(e):
+                   print(f"Gemini busy... retry {attempt + 1}/5")
+                   time.sleep(3)
+                   continue
+               raise
+           
+           if response is None:
+              raise HTTPException(status_code=503, detail="Gemini service is temporarily busy. Please try again in a few seconds.")
         
         # Clean the response text before parsing
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
