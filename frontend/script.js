@@ -541,7 +541,7 @@ DOM.chatForm.addEventListener('submit', async (e) => {
         const data = await res.json();
 
         removeMessage(typingIndicatorId);
-        appendMessage('bot', data.response);
+        appendMessage('bot', data.reply);
     }
 
     catch (error) {
