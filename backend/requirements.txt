@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 google-genai
+pypdf
 python-multipart
 PyMuPDF
 python-dotenv
