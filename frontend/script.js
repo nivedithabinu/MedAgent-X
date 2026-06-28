@@ -506,7 +506,7 @@ async function generateGraph(docId) {
     const doc = AppState.documents.find(d => d.id === docId);
     const context = doc.pages.map(p => p.text).join('\n');
     
-    const response = await fetch(`${AppState.backendUrl}api/generate-graph`, {
+    const response = await fetch(`${AppState.backendUrl}/api/generate-graph`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ context: context })
