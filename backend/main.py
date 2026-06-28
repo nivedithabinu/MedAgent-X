@@ -167,4 +167,6 @@ async def generate_ppt(req: ContextRequest, x_gemini_key: str = Header(None)):
         return {"slides": ppt_data}
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail="Failed to parse PPT JSON from AI or API error")
+        print(f"Error parsing JSON: {e}")
+        print(f"Raw response was: {response.text}")
+        raise HTTPException(status_code=500, detail="Failed to parse PPT JSON")
