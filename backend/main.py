@@ -60,7 +60,7 @@ def get_gemini_model(key, instruction, response_mime_type="text/plain"):
     if not actual_key:
         raise ValueError("No Gemini API key provided.")
         
-    client = genai.Client(api_key=actual_key)
+    client = genai.Client(api_key=actual_key, http_options={"api_version": "v1"})
     
     class ModelWrapper:
         def generate_content(self, prompt):
