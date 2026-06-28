@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from pypdf import PdfReader
 from google import genai
 from google.genai import types
+from flask import request, jsonify
 
 # load_dotenv(override=True)
 
@@ -109,6 +110,18 @@ async def upload_pdf(file: UploadFile = File(...), x_gemini_key: str = Header(No
         "pages": pages_data, 
         "message": "Medical document verified and parsed successfully."
     }
+
+@app.route('/api/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        return jsonify({"detail": "No file part in the request"}), 400
+    
+    file = request.files['file']
+
+    if file.filename == '':
+        return jsonify({"detail": "No file selected"}), 400
+        
+    return jsonify({"pages": [...]})
 
 @app.post("/api/chat")
 async def chat_with_agent(req: QueryRequest, x_gemini_key: str = Header(None)):
