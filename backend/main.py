@@ -32,7 +32,10 @@ class ContextRequest(BaseModel):
 # Globally configure the Gemini API key safely
 api_key = os.getenv("GEMINI_API_KEY")
 if api_key:
-    genai.configure(api_key=api_key)
+    # 1. Clean the key (Render sometimes includes accidental quotes)
+    clean_key = api_key.replace('"', '').replace("'", "").strip()
+    # 2. Force 'rest' transport to bypass the gRPC OAuth glitch!
+    genai.configure(api_key=clean_key, transport="rest")
 
 def generate_with_retry(prompt, instruction, response_mime_type="text/plain"):
     if not api_key:
