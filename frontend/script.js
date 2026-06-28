@@ -403,7 +403,13 @@ async function renderMindMap(forceRegenerate = false) {
     }
 
     catch (e) {
-        DOM.mindmapContainer.innerHTML = `<div class="text-red-500">Error rendering graph. Please regenerate.</div>`;
+        console.error("Mermaid Error:", e);
+        
+        DOM.mindmapContainer.innerHTML = `
+        <div class="text-red-500 p-4">
+        <h3>Mind Map Render Failed</h3>
+        <pre>${doc.mindmapCode}</pre>
+        </div>`;
     }
 }
 
