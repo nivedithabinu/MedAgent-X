@@ -7,8 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from pypdf import PdfReader
-from google import genai
-from google.genai import types
+
+import google.generativeai as genai
 
 load_dotenv(override=True)
 
@@ -22,7 +22,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Models
 class QueryRequest(BaseModel):
     query: str
     context: str
@@ -30,66 +29,64 @@ class QueryRequest(BaseModel):
 class ContextRequest(BaseModel):
     context: str
 
-# Helper: Auto-Retry for 429 Quota Errors & Resiliency
+# Globally configure the Gemini API key safely
+api_key = os.getenv("GEMINI_API_KEY")
+if api_key:
+    genai.configure(api_key=api_key)
+
 def generate_with_retry(prompt, instruction, response_mime_type="text/plain"):
-    api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        raise ValueError("GEMINI_API_KEY is missing in the Render environment.")
+        raise ValueError("GEMINI_API_KEY is missing in Render environment.")
     
-    client = genai.Client(api_key=api_key)
+    # Using classic GenerativeModel which prevents the OAuth token bug
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
+    # Embed instruction directly into the prompt to guarantee it works on any SDK version
+    full_prompt = f"System Instruction: {instruction}\n\nTask: {prompt}"
+    if response_mime_type == "application/json":
+        full_prompt += "\n\nCRITICAL: You MUST output ONLY valid JSON format."
+
     for attempt in range(2):
         try:
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=instruction,
-                    response_mime_type=response_mime_type
-                )
-            )
+            response = model.generate_content(full_prompt)
             return response
         except Exception as e:
             error_str = str(e).lower()
             if "429" in error_str or "quota" in error_str or "exhausted" in error_str:
                 if attempt == 0:
-                    print("⚠️ 429 Quota Hit! Pausing for 15 seconds...")
-                    time.sleep(15)  # Wait out the rate limit
+                    print("⚠️ 429 Quota Hit! Pausing for 15s...")
+                    time.sleep(15)
                     continue
             raise e
 
 @app.get("/")
 def read_root():
-    return {"status": "MedAgent-X Backend is live and ready!"}
+    return {"status": "Backend is live!"}
 
 @app.post("/api/upload")
 async def upload_pdf(file: UploadFile = File(...)):
-    if not file or not file.filename:
-        raise HTTPException(status_code=400, detail="No file received.")
     if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="File must be a PDF")
+        raise HTTPException(status_code=400, detail="Must be a PDF")
         
     try:
         content = await file.read()
         pdf = PdfReader(io.BytesIO(content))
         
         pages_data = []
-
         for i, page in enumerate(pdf.pages[:10]): 
             text = page.extract_text()
             if text:
                 pages_data.append({"page": i + 1, "text": text.strip()})
                 
         if not pages_data:
-            raise HTTPException(status_code=400, detail="Could not extract text from PDF")
+            raise HTTPException(status_code=400, detail="Could not extract text")
 
-        # Verify it is medical
-        first_page_text = pages_data[0]["text"][:500]
-        prompt = f"Analyze this text snippet: \"{first_page_text}\". Is this document highly likely related to the Medical, Health, or Biological sciences industry? Reply with exactly YES or NO."
-        
+        first_page = pages_data[0]["text"][:500]
+        prompt = f"Analyze this text snippet: \"{first_page}\". Is this highly likely related to Medical/Health sciences? Reply with exactly YES or NO."
         response = generate_with_retry(prompt, "You are a strict medical classifier.")
+        
         if "YES" not in response.text.strip().upper():
-            raise HTTPException(status_code=403, detail="Document rejected: Not a medical document.")
+            raise HTTPException(status_code=403, detail="Rejected: Not a medical document.")
 
         return {"filename": file.filename, "pages": pages_data}
     except Exception as e:
@@ -98,15 +95,7 @@ async def upload_pdf(file: UploadFile = File(...)):
 
 @app.post("/api/chat")
 async def chat_with_agent(req: QueryRequest):
-    prompt = f"""
-    User Query: "{req.query}"
-    Use the following context from the uploaded medical document to answer the query accurately.
-    CRITICAL INSTRUCTION: You MUST cite the page number for your claims based on the provided context (e.g., "[Page 3]").
-    If the answer is not in the context, state that clearly. Format your response in clean Markdown.
-
-    Document Context:
-    {req.context}
-    """
+    prompt = f"User Query: {req.query}\nDocument Context:\n{req.context[:15000]}"
     try:
         response = generate_with_retry(prompt, "You are a medical AI assistant. Always cite page numbers from context.")
         return {"reply": response.text}
@@ -115,17 +104,9 @@ async def chat_with_agent(req: QueryRequest):
 
 @app.post("/api/generate-graph")
 async def generate_graph(req: ContextRequest):
-    # Truncate context to 10k chars to ensure it doesn't timeout
-    prompt = f"""
-    Analyze the following medical text and create a comprehensive Mermaid.js mindmap showing the core disease, symptoms, treatments, and mechanisms discussed. 
-    Use strictly valid Mermaid mindmap syntax. Do not use markdown blocks (```). Just output the raw mermaid code.
-    Start with 'mindmap' on the first line. 
-    
-    Text Context:
-    {req.context[:10000]}
-    """
+    prompt = f"Analyze this medical text and create a Mermaid.js mindmap showing core disease, symptoms, treatments. Start with 'mindmap' on line 1. Text: {req.context[:8000]}"
     try:
-        response = generate_with_retry(prompt, "You are a medical data structurer. Output ONLY valid mermaid mindmap code.")
+        response = generate_with_retry(prompt, "Output ONLY valid mermaid mindmap code. No markdown blocks.")
         mermaid_code = response.text.replace("```mermaid", "").replace("```", "").strip()
         return {"mermaid_code": mermaid_code}
     except Exception as e:
@@ -133,21 +114,11 @@ async def generate_graph(req: ContextRequest):
 
 @app.post("/api/generate-ppt")
 async def generate_ppt(req: ContextRequest):
-    # Truncate context to 10k chars to ensure fast PPT generation
-    prompt = f"""
-    Analyze this medical research text and create a 5 slide presentation summarizing the core findings.
-    Return a JSON array where each object represents a slide. 
-    Schema: [{{ "title": "Slide Title", "bullets": ["point 1", "point 2"], "icon": "ph-pill" }}]
-    Choose an appropriate phosphor icon name (like ph-heartbeat, ph-virus, ph-pill, ph-flask, etc) for each slide.
-    
-    Text Context:
-    {req.context[:10000]}
-    """
+    prompt = f"Create a 5 slide presentation summarizing core findings. Schema: [{{ 'title': 'Title', 'bullets': ['pt1', 'pt2'], 'icon': 'ph-pill' }}]. Text: {req.context[:8000]}"
     try:
-        response = generate_with_retry(prompt, "You are a medical presenter. Output strictly a JSON array.", response_mime_type="application/json")
+        response = generate_with_retry(prompt, "Output strictly a JSON array.")
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
-        ppt_data = json.loads(clean_text)
-        return {"slides": ppt_data}
+        return {"slides": json.loads(clean_text)}
     except Exception as e:
-        print(f"PPT Generation Error: {e}")
-        raise HTTPException(status_code=500, detail="Failed to parse PPT JSON from AI. Please try again.")
+        print(f"PPT Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to parse PPT JSON from AI.")
