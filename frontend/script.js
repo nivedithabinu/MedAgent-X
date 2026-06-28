@@ -1,6 +1,6 @@
 /** APPLICATION STATE **/
 const AppState = {
-    backendUrl: 'https://medagent-x.onrender.com', // VERIFY THIS IS YOUR EXACT RENDER URL
+    backendUrl: 'https://medagent-x.onrender.com',
     documents: [], 
     activeDocId: null,
     pdfDoc: null,
