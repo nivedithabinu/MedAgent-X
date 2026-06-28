@@ -15,7 +15,7 @@ from pypdf import PdfReader
 from google import genai
 from google.genai import types
 
-load_dotenv(override=True)
+# load_dotenv(override=True)
 
 app = FastAPI(title="MedAgent-X API")
 
@@ -27,13 +27,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-print("ENV GEMINI_API_KEY =", repr(os.environ.get("GEMINI_API_KEY")))
-
 api_key = os.environ.get("GEMINI_API_KEY")
 
-print("API KEY PREFIX:", api_key[:10] 
-      if api_key 
-      else "None")
+print("ALL GEMINI ENV VARS:")
+for i, j in os.environ.items():
+    if "GEMINI" in i.upper() or "GOOGLE" in i.upper():
+        print(i, "=", j[:10] 
+              if j 
+              else 
+              None)
 
 if api_key and api_key != "your_api_key_here":
     print(f"✅ SUCCESS: API Key loaded correctly!")
