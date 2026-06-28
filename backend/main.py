@@ -27,7 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-print("ENV GEMINI_API_KEY =", os.environ.get("GEMINI_API_KEY", "")[:10])
+print("ENV GEMINI_API_KEY =", repr(os.environ.get("GEMINI_API_KEY")))
 
 api_key = os.environ.get("GEMINI_API_KEY")
 
