@@ -4,6 +4,7 @@ import io
 import antigravity
 import google.genai
 import traceback
+import re
 
 print("google-genai version:", google.genai.__version__)
 
@@ -201,6 +202,8 @@ Medical Document:
             .replace("\r", "")
             .strip()
         )
+
+        mermaid_code = re.sub(r'root\(\((.*?)\)\)', lambda m: f'root(({m.group(1).replace("(", "").replace(")", "")}))', mermaid_code)
 
         if not mermaid_code.startswith("mindmap"):
             mermaid_code = "mindmap\n" + mermaid_code
