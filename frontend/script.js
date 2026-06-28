@@ -289,6 +289,21 @@ function renderPage(num) {
     DOM.pdfPageNum.value = num;
 }
 
+async function uploadFile(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(`${AppState.backendUrl}/api/upload`, {
+        method: 'POST',
+        body: formData
+    });
+    
+    if (!response.ok) 
+        throw new Error("Upload failed");
+    
+    return await response.json();
+}
+
 // Jump to specific page
 // NEW: Jump to specific page on ENTER key
 DOM.pdfPageNum.addEventListener('keydown', (e) => {
