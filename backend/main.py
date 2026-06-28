@@ -142,20 +142,53 @@ async def chat_with_agent(req: QueryRequest, x_gemini_key: str = Header(None)):
 
 @app.post("/api/generate-graph")
 async def generate_graph(req: ContextRequest, x_gemini_key: str = Header(None)):
-    prompt = f"""
-    Analyze the following medical text and create a comprehensive Mermaid.js mindmap showing the core disease, symptoms, treatments, and mechanisms discussed. 
-    Use strictly valid Mermaid mindmap syntax. Do not use markdown blocks (```). Just output the raw mermaid code.
-    Start with 'mindmap' on the first line. 
-    Keep nodes concise.
+   prompt = f"""
+    You are an expert medical knowledge graph generator.
+    Analyze the medical document and produce ONLY a valid Mermaid mindmap.
     
-    Text Context:
-    {req.context}
-    """
+    STRICT RULES:
+    - Output ONLY Mermaid code.
+    - Do NOT explain anything.
+    - Do NOT wrap the response in ``` blocks.
+    - The first line MUST be exactly: mindmap
+    - Use this structure:
+    
+    mindmap
+  root((Main Disease))
+    Symptoms
+      Symptom 1
+      Symptom 2
+    Causes
+      Cause 1
+      Cause 2
+    Diagnosis
+      Method 1
+      Method 2
+    Treatment
+      Drug 1
+      Drug 2
+    Prevention
+      Prevention 1
+    Complications
+      Complication 1
+
+Keep node labels short.
+Never use special characters like :, (), [], {{}} inside labels except the root node.
+Maximum depth: 3.
+
+Medical Document:
+
+{req.context}
+"""
     try:
         model = get_gemini_model(x_gemini_key, "You are a medical data structurer. Output ONLY valid mermaid mindmap code.")
         response = model.generate_content(prompt)
-        mermaid_code = response.text.replace("```mermaid", "").replace("```", "").strip()
 
+        mermaid_code = (response.text.replace("```mermaid", "").replace("```", "").replace("\r", "").strip())
+        
+        if not mermaid_code.startswith("mindmap"):
+            mermaid_code = "mindmap\n" + mermaid_code
+        
         return {"mermaid_code": mermaid_code}
 
     except Exception as e:
