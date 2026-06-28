@@ -202,10 +202,11 @@ DOM.fileUpload.addEventListener('change', async (e) => {
             const arrayBuffer = await file.arrayBuffer();
 
             AppState.documents.push({
-                id: data.doc_id,
+                id: crypto.randomUUID(),
                 name: file.name,
                 file: file,
                 arrayBuffer: arrayBuffer,
+                pages: data.pages,
                 mindmapCode: null,
                 pptData: null
             });
