@@ -3,6 +3,7 @@ import json
 import io
 import antigravity
 import google.genai
+import traceback
 
 print("google-genai version:", google.genai.__version__)
 
@@ -103,6 +104,10 @@ async def upload_pdf(file: UploadFile = File(...), x_gemini_key: str = Header(No
             raise HTTPException(status_code=403, detail="Document rejected: Not a medical document.")
 
     except Exception as e:
+        print("========== GEMINI ERROR ==========")
+        traceback.print_exc()
+        print("==================================")
+        
         raise HTTPException(status_code=500, detail=str(e))
 
     return {
