@@ -519,12 +519,18 @@ DOM.chatForm.addEventListener('submit', async (e) => {
     const typingIndicatorId = appendTypingIndicator();
 
     try {
-        const res = await fetch(`${AppState.backendUrl}/api/documents/${doc.id}/chat`, {
-            method: 'POST',
+        const context = doc.pages.map(page => `[Page ${page.page}]\n${page.text}`).join("\n\n");
+        
+        const res = await fetch(`${AppState.backendUrl}/api/chat`, {
+            method: "POST",
             headers: {
-                'Content-Type': 'application/json'
+                "Content-Type": "application/json"
             },
-            body: JSON.stringify({ query: query })
+            
+            body: JSON.stringify({
+                query: query,
+                context: context
+            })
         });
 
         if (!res.ok) {
