@@ -205,6 +205,13 @@ Medical Document:
 
         mermaid_code = re.sub(r'root\(\((.*?)\)\)', lambda m: f'root(({m.group(1).replace("(", "").replace(")", "")}))', mermaid_code)
 
+        mermaid_code = mermaid_code.replace("[", "")
+        mermaid_code = mermaid_code.replace("]", "")
+        mermaid_code = mermaid_code.replace("{", "")
+        mermaid_code = mermaid_code.replace("}", "")
+        mermaid_code = mermaid_code.replace(":", "")
+        mermaid_code = mermaid_code.replace(";", "")
+
         if not mermaid_code.startswith("mindmap"):
             mermaid_code = "mindmap\n" + mermaid_code
 
