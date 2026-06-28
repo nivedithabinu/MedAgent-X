@@ -354,8 +354,16 @@ async function renderMindMap(forceRegenerate = false) {
         showOverlay("Analyzing Medical Concepts...\nDrawing Knowledge Graph...");
 
         try {
-            const res = await fetch(`${AppState.backendUrl}/api/documents/${doc.id}/mindmap`, {
-                method: 'POST'
+            const context = doc.pages.map(page => `[Page ${page.page}]\n${page.text}`).join("\n\n");
+            
+            const res = await fetch(`${AppState.backendUrl}/api/generate-graph`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    context: context
+                })
             });
 
             if (!res.ok) {
@@ -364,7 +372,7 @@ async function renderMindMap(forceRegenerate = false) {
             }
 
             const data = await res.json();
-            doc.mindmapCode = data.mindmapCode;
+            doc.mindmapCode = data.mermaid_code;
         }
 
         catch (e) {
@@ -412,8 +420,16 @@ async function renderPpt(forceRegenerate = false) {
         showOverlay("Distilling key findings...\nGenerating Presentation Deck...");
 
         try {
-            const res = await fetch(`${AppState.backendUrl}/api/documents/${doc.id}/ppt`, {
-                method: 'POST'
+            cconst context = doc.pages.map(page => `[Page ${page.page}]\n${page.text}`).join("\n\n");
+            
+            const res = await fetch(`${AppState.backendUrl}/api/generate-ppt`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    context: context
+                })
             });
 
             if (!res.ok) {
@@ -422,7 +438,7 @@ async function renderPpt(forceRegenerate = false) {
             }
 
             const data = await res.json();
-            doc.pptData = data.pptData;
+            doc.pptData = data.slides;
         }
 
         catch (e) {
