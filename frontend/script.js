@@ -55,6 +55,7 @@ const DOM = {
 
     loadingOverlay: document.getElementById('loading-overlay'),
     loadingText: document.getElementById('loading-text'),
+
     toastContainer: document.getElementById('toast-container')
 };
 
@@ -134,7 +135,6 @@ if (DOM.btnHome) {
 function openWorkspace() {
     DOM.landingView.classList.remove('flex');
     DOM.landingView.classList.add('hidden');
-
     DOM.appWorkspace.classList.remove('hidden');
     DOM.appWorkspace.classList.add('flex');
 }
@@ -187,7 +187,6 @@ function showOverlay(text) {
         DOM.loadingOverlay.classList.add('flex');
     }
 }
-
 function hideOverlay() {
     if (DOM.loadingOverlay) {
         DOM.loadingOverlay.classList.add('hidden');
@@ -208,7 +207,8 @@ async function checkBackendConnection() {
             });
 
             DOM.apiStatusTexts.forEach(el => {
-                if (el) el.textContent = "Backend Online";
+                if (el)
+                    el.textContent = "Backend Online";
             });
         }
     }
@@ -231,67 +231,83 @@ async function checkBackendConnection() {
 setTimeout(checkBackendConnection, 500);
 
 /** DOCUMENT UPLOAD & PARSING **/
-async function handleFileUpload(file) {
-    if (!file)
+async function handleFileUpload(files) {
+    if (!files || files.length === 0)
         return;
 
-    if (file.type !== "application/pdf")
-        return showToast("Please upload PDF files only.", "error");
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
 
-    showOverlay("Uploading to Server...\nChunking & Embedding Document...");
-
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-        const res = await fetch(`${AppState.backendUrl}/api/upload`, {
-            method: 'POST', body: formData
-        });
-
-        if (!res.ok) {
-            const errorText = await res.json().catch(() => ({ detail: "Server connection failed." }));
-            throw new Error(errorText.detail || "Upload failed");
+        if (file.type !== "application/pdf") {
+            showToast(`Skipped ${file.name}: Not a PDF.`, "error");
+            continue;
         }
 
-        const data = await res.json();
-        const arrayBuffer = await file.arrayBuffer();
+        showOverlay(`Processing ${file.name}...\nChunking & Embedding Document...`);
 
-        AppState.documents.push({
-            id: data.doc_id,
-            name: file.name,
-            arrayBuffer: arrayBuffer,
-            pagesCount: data.pages_count,
-            mindmapCode: null,
-            pptData: null
-        });
+        const formData = new FormData();
+        formData.append('file', file);
 
-        showToast("Document verified and Vectorized successfully!", "success");
-        updateSidebarList();
+        try {
+            const res = await fetch(`${AppState.backendUrl}/api/upload`, {
+                method: 'POST',
+                body: formData
+            });
 
-        if (DOM.landingView && !DOM.landingView.classList.contains('hidden'))
-            openWorkspace();
+            if (!res.ok) {
+                const errorText = await res.json().catch(() => ({ detail: "Server connection failed." }));
+                throw new Error(errorText.detail || "Upload failed");
+            }
 
+            const data = await res.json();
+            const arrayBuffer = await file.arrayBuffer();
+
+            AppState.documents.push({
+                id: data.doc_id,
+                name: file.name,
+                arrayBuffer: arrayBuffer,
+                pagesCount: data.pages_count,
+                mindmapCode: null,
+                pptData: null
+            });
+
+            showToast(`${file.name} Vectorized successfully!`, "success");
+        }
+
+        catch (err) {
+            showToast(`Failed ${file.name}: ${err.message}`, "error");
+        }
+    }
+
+    updateSidebarList();
+    hideOverlay();
+
+    if (DOM.landingView && !DOM.landingView.classList.contains('hidden'))
+        openWorkspace();
+
+    // Auto-select the most recently uploaded document
+    if (AppState.documents.length > 0) {
         selectDocument(AppState.documents[AppState.documents.length - 1].id);
-
-    }
-
-    catch (err) {
-        showToast(err.message, "error");
-    }
-
-    finally {
-        hideOverlay();
     }
 }
 
 if (DOM.heroFileUpload)
     DOM.heroFileUpload.addEventListener('change', (e) => {
-        handleFileUpload(e.target.files[0]); e.target.value = '';
+        handleFileUpload(e.target.files);
+        e.target.value = '';
     });
 
 if (DOM.sidebarFileUpload)
     DOM.sidebarFileUpload.addEventListener('change', (e) => {
-        handleFileUpload(e.target.files[0]); e.target.value = '';
+        handleFileUpload(e.target.files);
+        e.target.value = '';
+    });
+
+const fallbackUpload = document.getElementById('file-upload');
+if (fallbackUpload)
+    fallbackUpload.addEventListener('change', (e) => {
+        handleFileUpload(e.target.files);
+        e.target.value = '';
     });
 
 function updateSidebarList() {
@@ -314,9 +330,10 @@ function updateSidebarList() {
 }
 
 async function selectDocument(docId) {
-    AppState.activeDocId = docId; updateSidebarList();
-    const doc = AppState.documents.find(d => d.id === docId);
+    AppState.activeDocId = docId;
+    updateSidebarList();
 
+    const doc = AppState.documents.find(d => d.id === docId);
     if (!doc)
         return;
 
@@ -370,7 +387,9 @@ function renderPage(num) {
         DOM.pdfCanvas.height = viewport.height;
         DOM.pdfCanvas.width = viewport.width;
 
-        page.render({ canvasContext: DOM.pdfCanvas.getContext('2d'), viewport: viewport });
+        page.render({
+            canvasContext: DOM.pdfCanvas.getContext('2d'), viewport: viewport
+        });
     });
 
     if (DOM.pdfPageNum)
@@ -380,7 +399,8 @@ function renderPage(num) {
 if (DOM.pdfPageNum) {
     DOM.pdfPageNum.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
-            e.preventDefault(); let desiredPage = parseInt(e.target.value);
+            e.preventDefault();
+            let desiredPage = parseInt(e.target.value);
 
             if (desiredPage >= 1 && desiredPage <= AppState.pdfDoc.numPages) {
                 AppState.pageNum = desiredPage;
@@ -396,20 +416,10 @@ if (DOM.pdfPageNum) {
 }
 
 if (DOM.pdfPrev)
-    DOM.pdfPrev.addEventListener('click', () => {
-        if (AppState.pageNum > 1) {
-            AppState.pageNum--;
-            renderPage(AppState.pageNum);
-        }
-    });
+    DOM.pdfPrev.addEventListener('click', () => { if (AppState.pageNum > 1) { AppState.pageNum--; renderPage(AppState.pageNum); } });
 
 if (DOM.pdfNext)
-    DOM.pdfNext.addEventListener('click', () => {
-        if (AppState.pageNum < AppState.pdfDoc.numPages) {
-            AppState.pageNum++;
-            renderPage(AppState.pageNum);
-        }
-    });
+    DOM.pdfNext.addEventListener('click', () => { if (AppState.pageNum < AppState.pdfDoc.numPages) { AppState.pageNum++; renderPage(AppState.pageNum); } });
 
 /** API CALL HELPER **/
 async function callBackend(endpoint, payload) {
@@ -466,9 +476,13 @@ async function renderMindMap(forceRegenerate = false) {
         if (svg) {
             let scale = 1;
             DOM.mindmapContainer.addEventListener('wheel', (e) => {
-                e.preventDefault(); scale += e.deltaY * -0.001;
+                e.preventDefault();
+
+                scale = scale + e.deltaY * -0.001;
                 scale = Math.min(Math.max(0.4, scale), 5);
-                svg.style.transform = `scale(${scale})`; svg.style.transition = 'transform 0.1s';
+
+                svg.style.transform = `scale(${scale})`;
+                svg.style.transition = 'transform 0.1s';
             });
         }
     }
@@ -491,20 +505,23 @@ async function renderPpt(forceRegenerate = false) {
 
     if (forceRegenerate || !doc.pptData) {
         showOverlay("Distilling key findings...\nGenerating Presentation Deck...");
-
         try {
             const data = await callBackend('generate-ppt', { doc_id: doc.id });
             doc.pptData = data.slides;
         }
 
         catch (e) {
-            showToast(e.message, "error"); hideOverlay(); return;
+            showToast(e.message, "error");
+            hideOverlay(); return;
         }
 
         hideOverlay();
     }
 
-    AppState.pptSlides = doc.pptData; AppState.currentPptSlide = 0; updatePptView();
+    AppState.pptSlides = doc.pptData;
+    AppState.currentPptSlide = 0;
+
+    updatePptView();
 }
 
 function updatePptView() {
@@ -542,19 +559,10 @@ function updatePptView() {
 }
 
 if (DOM.pptPrev)
-    DOM.pptPrev.addEventListener('click', () => {
-        if (AppState.currentPptSlide > 0) {
-            AppState.currentPptSlide--;
-            updatePptView();
-        }
-    });
+    DOM.pptPrev.addEventListener('click', () => { if (AppState.currentPptSlide > 0) { AppState.currentPptSlide--; updatePptView(); } });
 
 if (DOM.pptNext)
-    DOM.pptNext.addEventListener('click', () => {
-        if (AppState.currentPptSlide < AppState.pptSlides.length - 1) {
-            AppState.currentPptSlide++; updatePptView();
-        }
-    });
+    DOM.pptNext.addEventListener('click', () => { if (AppState.currentPptSlide < AppState.pptSlides.length - 1) { AppState.currentPptSlide++; updatePptView(); } });
 
 // TRIGGER PPTX DOWNLOAD
 if (DOM.btnDownloadPpt) {
@@ -613,7 +621,8 @@ if (DOM.chatForm) {
         if (!doc)
             return showToast("Upload a medical document first.", "error");
 
-        appendMessage('user', query); DOM.chatInput.value = '';
+        appendMessage('user', query);
+        DOM.chatInput.value = '';
         const typingIndicatorId = appendTypingIndicator();
 
         try {
@@ -631,7 +640,8 @@ function appendMessage(sender, text) {
     if (!DOM.chatHistory)
         return;
 
-    const div = document.createElement('div'); div.className = 'flex gap-3';
+    const div = document.createElement('div');
+    div.className = 'flex gap-3';
 
     if (sender === 'user') {
         div.innerHTML = `<div class="flex-1 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-3.5 rounded-2xl rounded-tr-sm shadow-sm border border-gray-200 dark:border-gray-700 ml-8 text-sm">${marked.parse(text)}</div>
@@ -652,8 +662,10 @@ function appendTypingIndicator() {
         return null;
 
     const id = 'typing-' + Date.now();
-    const div = document.createElement('div'); div.id = id; div.className = 'flex gap-3 items-center text-gray-400 text-xs font-medium uppercase tracking-wider';
+    const div = document.createElement('div');
 
+    div.id = id;
+    div.className = 'flex gap-3 items-center text-gray-400 text-xs font-medium uppercase tracking-wider';
     div.innerHTML = `<div class="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center shrink-0 text-io-accent border border-teal-200 dark:border-teal-800 opacity-50"><i class="ph-fill ph-robot text-lg"></i></div>Semantic Search in progress...`;
 
     DOM.chatHistory.appendChild(div);
@@ -664,6 +676,7 @@ function appendTypingIndicator() {
 
 function removeMessage(id) {
     const el = document.getElementById(id);
+
     if (el)
         el.remove();
 }
