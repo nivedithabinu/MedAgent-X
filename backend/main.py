@@ -4,7 +4,7 @@ import io
 import time
 import uuid
 import numpy as np
-import google.generativeai as genai
+import requests
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,32 +38,70 @@ vector_db = {}
 api_key = os.getenv("GEMINI_API_KEY")
 if api_key:
     api_key = api_key.replace('"', '').replace("'", "").strip()
-    # Forcing REST transport bypasses the OAuth bug on cloud servers!
-    genai.configure(api_key=api_key, transport="rest")
+
+class AIResponse:
+    def __init__(self, text):
+        self.text = text
 
 def generate_with_retry(prompt: str, instruction: str, response_mime_type: str = "text/plain"):
     if not api_key:
         raise ValueError("GEMINI_API_KEY is missing. Please set it in Render Dashboard.")
     
-    model = genai.GenerativeModel(model_name='gemini-2.5-flash', system_instruction=instruction)
-    
-    generation_config = genai.GenerationConfig(response_mime_type=response_mime_type, temperature=0.2)
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    payload = {
+        "systemInstruction": {"parts": [{"text": instruction}]},
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "temperature": 0.2,
+            "responseMimeType": response_mime_type
+        }
+    }
     
     for attempt in range(2):
         try:
-            response = model.generate_content(prompt, generation_config=generation_config)
-            return response
-
-        except Exception as e:
-            error_str = str(e).lower()
-    
-            if "429" in error_str or "quota" in error_str:
+            res = requests.post(url, json=payload)
+            
+            if res.status_code == 429:
                 if attempt == 0:
                     print("⚠️ Quota Hit! Pausing for 15s...")
                     time.sleep(15)
                     continue
+                    
+            res.raise_for_status()
+            data = res.json()
             
-            raise e
+            # Extract text safely
+            text_content = data["candidates"][0]["content"]["parts"][0]["text"]
+            return AIResponse(text_content)
+            
+        except Exception as e:
+            error_msg = res.text if 'res' in locals() and hasattr(res, 'text') else str(e)
+    
+            if attempt == 1:
+                raise Exception(f"Gemini API Error: {error_msg}")
+
+def get_embeddings(texts: list):
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is missing.")
+        
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents?key={api_key}"
+
+    requests_list = [
+        {
+            "model": "models/text-embedding-004",
+            "content": {"parts": [{"text": t}]}
+        } 
+        
+        for t in texts
+    ]
+    
+    res = requests.post(url, json={"requests": requests_list})
+
+    if not res.ok:
+        raise Exception(f"Embedding API Error: {res.text}")
+        
+    data = res.json()
+    return [np.array(emb["values"]) for emb in data.get("embeddings", [])]
 
 @app.get("/")
 def read_root():
@@ -100,17 +138,10 @@ async def upload_pdf(file: UploadFile = File(...)):
         chunk_size = 1500
         chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)][:60]
 
-        # Classic SDK Batch Embedding
-        embed_res = genai.embed_content(
-            model='models/text-embedding-004',
-            content=chunks,
-            task_type="retrieval_document"
-        )
-
-        embeddings = [np.array(emb) for emb in embed_res['embedding']]
+        embeddings = get_embeddings(chunks)
 
         doc_id = str(uuid.uuid4())
-    
+
         vector_db[doc_id] = {
             "chunks": chunks,
             "embeddings": embeddings,
@@ -137,14 +168,7 @@ async def chat_with_agent(req: QueryRequest):
     doc_data = vector_db[req.doc_id]
     
     try:
-        # Embed Query
-        query_res = genai.embed_content(
-            model='models/text-embedding-004',
-            content=req.query,
-            task_type="retrieval_query"
-        )
-
-        query_emb = np.array(query_res['embedding'])
+        query_emb = get_embeddings([req.query])[0]
         
         similarities = [np.dot(query_emb, doc_emb) / (np.linalg.norm(query_emb) * np.linalg.norm(doc_emb)) for doc_emb in doc_data["embeddings"]]
         top_indices = np.argsort(similarities)[-4:][::-1]
@@ -231,7 +255,7 @@ async def export_ppt(req: DocRequest):
 
         if bullets:
             t.text = bullets[0]
-            
+
             for bullet in bullets[1:]:
                 p = t.add_paragraph()
                 p.text = bullet
