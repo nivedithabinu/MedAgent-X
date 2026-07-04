@@ -4,14 +4,13 @@ import io
 import time
 import uuid
 import numpy as np
+import google.generativeai as genai
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
 from pypdf import PdfReader
-from google import genai
-from google.genai import types
 from fastapi.responses import StreamingResponse
 from pptx import Presentation
 
@@ -37,42 +36,39 @@ class DocRequest(BaseModel):
 vector_db = {}
 
 api_key = os.getenv("GEMINI_API_KEY")
-
 if api_key:
     api_key = api_key.replace('"', '').replace("'", "").strip()
-
-client = genai.Client(api_key=api_key) if api_key else None
+    # Forcing REST transport bypasses the OAuth bug on cloud servers!
+    genai.configure(api_key=api_key, transport="rest")
 
 def generate_with_retry(prompt: str, instruction: str, response_mime_type: str = "text/plain"):
-    if not client:
-        raise ValueError("GEMINI_API_KEY is missing.")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is missing. Please set it in Render Dashboard.")
+    
+    model = genai.GenerativeModel(model_name='gemini-2.5-flash', system_instruction=instruction)
+    
+    generation_config = genai.GenerationConfig(response_mime_type=response_mime_type, temperature=0.2)
     
     for attempt in range(2):
         try:
-            response = client.models.generate_content(
-                model='gemini-2.5-flash',
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=instruction,
-                    response_mime_type=response_mime_type,
-                    temperature=0.2
-                )
-            )
-
+            response = model.generate_content(prompt, generation_config=generation_config)
             return response
 
         except Exception as e:
-            if "429" in str(e).lower() and attempt == 0:
-                print("⚠️ Quota Hit! Pausing for 15s...")
-                time.sleep(15)
-                continue
-
+            error_str = str(e).lower()
+    
+            if "429" in error_str or "quota" in error_str:
+                if attempt == 0:
+                    print("⚠️ Quota Hit! Pausing for 15s...")
+                    time.sleep(15)
+                    continue
+            
             raise e
 
 @app.get("/")
 def read_root():
     return {
-        "status": "MedAgent-X Backend Online"
+        "status": "MedAgent-X Enterprise Backend Online"
     }
 
 @app.post("/api/upload")
@@ -88,9 +84,8 @@ async def upload_pdf(file: UploadFile = File(...)):
 
         for i, page in enumerate(pdf.pages): 
             text = page.extract_text()
-    
             if text:
-                full_text += f"\n--- [PAGE {i+1}] ---\n{text.strip()}\n"
+                full_text = full_text + f"\n--- [PAGE {i+1}] ---\n{text.strip()}\n"
                 
         if not full_text:
             raise HTTPException(status_code=400, detail="Could not extract text from PDF.")
@@ -105,15 +100,17 @@ async def upload_pdf(file: UploadFile = File(...)):
         chunk_size = 1500
         chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)][:60]
 
-        embed_res = client.models.embed_content(
-            model='text-embedding-004',
-            contents=chunks
+        # Classic SDK Batch Embedding
+        embed_res = genai.embed_content(
+            model='models/text-embedding-004',
+            content=chunks,
+            task_type="retrieval_document"
         )
 
-        embeddings = [np.array(emb.values) for emb in embed_res.embeddings]
+        embeddings = [np.array(emb) for emb in embed_res['embedding']]
 
         doc_id = str(uuid.uuid4())
-
+    
         vector_db[doc_id] = {
             "chunks": chunks,
             "embeddings": embeddings,
@@ -140,10 +137,14 @@ async def chat_with_agent(req: QueryRequest):
     doc_data = vector_db[req.doc_id]
     
     try:
-        query_emb = np.array(client.models.embed_content(
-            model='text-embedding-004',
-            contents=req.query
-        ).embeddings[0].values)
+        # Embed Query
+        query_res = genai.embed_content(
+            model='models/text-embedding-004',
+            content=req.query,
+            task_type="retrieval_query"
+        )
+
+        query_emb = np.array(query_res['embedding'])
         
         similarities = [np.dot(query_emb, doc_emb) / (np.linalg.norm(query_emb) * np.linalg.norm(doc_emb)) for doc_emb in doc_data["embeddings"]]
         top_indices = np.argsort(similarities)[-4:][::-1]
@@ -170,7 +171,7 @@ async def generate_graph(req: DocRequest):
         }
 
     prompt = f"Analyze this medical text and create a Mermaid.js mindmap showing core disease, symptoms, treatments. Start with 'mindmap' on line 1. Text: {vector_db[req.doc_id]['full_text'][:15000]}"
-
+    
     try:
         response = generate_with_retry(prompt, "Output ONLY valid mermaid mindmap code. No markdown blocks.")
         mermaid_code = response.text.replace("```mermaid", "").replace("```", "").strip()
@@ -191,14 +192,13 @@ async def generate_ppt(req: DocRequest):
     if vector_db[req.doc_id]["ppt"]:
         return {
             "slides": vector_db[req.doc_id]["ppt"]
-        }
+    }
 
     prompt = f"Create a 5 slide presentation summarizing core findings. Schema: [{{ 'title': 'Title', 'bullets': ['pt1', 'pt2'], 'icon': 'ph-pill' }}]. Text: {vector_db[req.doc_id]['full_text'][:15000]}"
-
+    
     try:
         response = generate_with_retry(prompt, "Output strictly a JSON array.", "application/json")
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
-
         slides = json.loads(clean_text)
         vector_db[req.doc_id]["ppt"] = slides
 
@@ -226,13 +226,14 @@ async def export_ppt(req: DocRequest):
             title_shape.text = slide_data.get("title", "Slide")
         
         body_shape = slide.shapes.placeholders[1]
-        text_frame = body_shape.text_frame
+        t = body_shape.text_frame
         bullets = slide_data.get("bullets", [])
 
         if bullets:
-            text_frame.text = bullets[0]
+            t.text = bullets[0]
+            
             for bullet in bullets[1:]:
-                p = text_frame.add_paragraph()
+                p = t.add_paragraph()
                 p.text = bullet
                 p.level = 0
 
