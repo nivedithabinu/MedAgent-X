@@ -12,6 +12,10 @@ from pypdf import PdfReader
 from google import genai
 from google.genai import types
 
+from fastapi.responses import StreamingResponse
+from pptx import Presentation
+import io
+
 load_dotenv(override=True)
 
 app = FastAPI(title="MedAgent-X API")
