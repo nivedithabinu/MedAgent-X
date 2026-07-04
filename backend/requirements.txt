@@ -1,9 +1,9 @@
 fastapi
 uvicorn
-google-generativeai
 pydantic
 python-multipart
 pypdf
 python-dotenv
 numpy
 python-pptx
+requests
