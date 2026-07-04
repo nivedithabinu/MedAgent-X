@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MedAgent-X | Agentic Medical AI Research Assistant </title>
+    <title>MedAgent-X | Agentic AI Medical Research Assistant</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -20,17 +20,14 @@
                             accent: '#0d9488', // Clinical Teal
                         }
                     },
-
                     fontFamily: {
                         sans: ['Inter', 'sans-serif'],
                     },
-
                     animation: {
                         'blob': 'blob 7s infinite',
                         'fade-in': 'fadeIn 0.5s ease-out forwards',
                         'slide-up': 'slideUp 0.3s ease-out forwards',
                     },
-
                     keyframes: {
                         blob: {
                             '0%': { transform: 'translate(0px, 0px) scale(1)' },
@@ -51,10 +48,11 @@
             }
         }
     </script>
-    <link rel="stylesheet" href="style.css">
+    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
         rel="stylesheet">
 
+    <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
     <!-- PDF.js -->
@@ -68,10 +66,12 @@
 
 <body
     class="bg-gray-50 dark:bg-io-900 text-gray-900 dark:text-gray-100 h-screen w-screen overflow-hidden transition-colors duration-300 relative">
+
     <!-- ========================================== -->
-    <!-- VIEW 1: LANDING PAGE                 -->
+    <!-- VIEW 1: SLEEK LANDING PAGE                 -->
     <!-- ========================================== -->
     <div id="landing-view" class="absolute inset-0 flex flex-col z-20 overflow-y-auto">
+
         <!-- Animated Background Blobs -->
         <div class="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
             <div
@@ -94,11 +94,9 @@
                 </div>
                 <span>MedAgent<span class="text-io-accent">-X</span></span>
             </div>
-
             <div class="flex items-center gap-6 font-medium text-sm">
                 <a href="#" class="hover:text-io-accent transition-colors hidden sm:block">Features</a>
                 <a href="#" class="hover:text-io-accent transition-colors hidden sm:block">Architecture</a>
-
                 <div
                     class="flex items-center gap-2 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700">
                     <div id="landing-status-indicator"
@@ -106,7 +104,6 @@
                     <span id="landing-status-text" class="text-xs uppercase tracking-wider text-gray-500">Backend
                         Offline</span>
                 </div>
-
                 <button id="btn-theme-landing"
                     class="p-2 rounded-full bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm border border-gray-200 dark:border-gray-700 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
                     <i class="ph ph-moon text-xl block dark:hidden"></i>
@@ -121,10 +118,10 @@
                 style="animation-delay: 0.1s;">
                 ✨ Powered by Gemini 2.5 Flash & FastAPI
             </div>
+
             <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 max-w-4xl leading-tight animate-slide-up"
                 style="animation-delay: 0.2s;">
-                Decode Medical Research
-                <br class="hidden md:block" />
+                Decode Medical Research <br class="hidden md:block" />
                 <span class="text-transparent bg-clip-text bg-gradient-to-r from-teal-500 to-blue-500">in
                     Seconds.</span>
             </h1>
@@ -135,19 +132,20 @@
                 interactive knowledge graphs, and generates presentation decks instantly.
             </p>
 
-            <!-- Upload & Drop -->
+            <!-- Upload Dropzone -->
             <div class="w-full max-w-2xl animate-slide-up" style="animation-delay: 0.4s;">
                 <label for="hero-file-upload"
                     class="group relative flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-3xl bg-white/40 dark:bg-gray-800/40 backdrop-blur-md hover:bg-white/60 dark:hover:bg-gray-800/60 hover:border-io-accent transition-all cursor-pointer overflow-hidden shadow-xl">
+
                     <div
                         class="absolute inset-0 bg-gradient-to-br from-teal-500/5 to-blue-500/5 opacity-0 group-hover:opacity-100 transition-opacity">
                     </div>
+
                     <div class="flex flex-col items-center justify-center pt-5 pb-6 z-10">
                         <div
                             class="w-20 h-20 mb-4 rounded-full bg-teal-50 dark:bg-teal-900/50 flex items-center justify-center text-io-accent group-hover:scale-110 transition-transform shadow-inner">
                             <i class="ph ph-upload-simple text-4xl"></i>
                         </div>
-
                         <p class="mb-2 text-xl font-semibold text-gray-700 dark:text-gray-200">Click to upload or drag
                             and drop</p>
                         <p class="text-sm text-gray-500 dark:text-gray-400">Medical PDFs only (Clinical Trials, Research
@@ -166,14 +164,12 @@
                     <p class="text-sm text-gray-600 dark:text-gray-400">Automatically rejects non-medical documents
                         using zero-shot classification.</p>
                 </div>
-
                 <div class="flex flex-col items-center text-center p-6 rounded-2xl glass-panel">
                     <i class="ph-fill ph-tree-structure text-4xl text-blue-500 mb-4"></i>
                     <h3 class="text-lg font-bold mb-2">Knowledge Graphs</h3>
                     <p class="text-sm text-gray-600 dark:text-gray-400">Instantly maps symptoms, treatments, and
                         mechanisms into interactive Mermaid.js charts.</p>
                 </div>
-
                 <div class="flex flex-col items-center text-center p-6 rounded-2xl glass-panel">
                     <i class="ph-fill ph-presentation-chart text-4xl text-purple-500 mb-4"></i>
                     <h3 class="text-lg font-bold mb-2">Automated Pitch Decks</h3>
@@ -188,6 +184,7 @@
     <!-- VIEW 2: APP WORKSPACE (Initially Hidden)   -->
     <!-- ========================================== -->
     <div id="app-workspace" class="hidden flex-col h-full w-full z-30 bg-white dark:bg-io-900">
+
         <!-- App Header -->
         <header
             class="h-14 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 shrink-0 bg-gray-50 dark:bg-gray-900 transition-colors">
@@ -195,13 +192,11 @@
                 <button id="btn-home" class="text-gray-500 hover:text-io-accent transition-colors" title="Back to Home">
                     <i class="ph-bold ph-arrow-left text-xl"></i>
                 </button>
-
                 <div class="flex items-center gap-2 text-io-accent font-bold tracking-wide">
                     <div
                         class="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-400 to-io-accent flex items-center justify-center text-white shadow-md">
                         <i class="ph-fill ph-stethoscope"></i>
                     </div>
-
                     <span>MedAgent<span
                             class="text-xs font-normal text-gray-500 dark:text-gray-400 ml-1">Workspace</span></span>
                 </div>
@@ -225,6 +220,7 @@
 
         <!-- Main Workspace Area -->
         <main class="flex flex-1 overflow-hidden">
+
             <!-- LEFT: Sidebar -->
             <aside
                 class="w-64 border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 flex flex-col transition-colors z-10 shadow-[4px_0_24px_rgba(0,0,0,0.02)] dark:shadow-[4px_0_24px_rgba(0,0,0,0.2)]">
@@ -255,13 +251,11 @@
                         data-target="view-paper">
                         <i class="ph ph-file-text text-lg"></i> Original Paper
                     </button>
-
                     <button
                         class="tab-btn text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 font-medium border-b-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600 px-4 py-2.5 transition-colors flex items-center gap-2"
                         data-target="view-graph">
                         <i class="ph ph-graph text-lg"></i> Knowledge Graph
                     </button>
-
                     <button
                         class="tab-btn text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 font-medium border-b-2 border-transparent hover:border-gray-300 dark:hover:border-gray-600 px-4 py-2.5 transition-colors flex items-center gap-2"
                         data-target="view-ppt">
@@ -272,27 +266,23 @@
                 <!-- Content Area -->
                 <div class="flex-1 overflow-auto relative p-4 bg-gray-50/30 dark:bg-gray-900/30"
                     id="center-content-area">
+
                     <!-- Paper View -->
                     <div id="view-paper" class="tab-content w-full h-full flex flex-col items-center">
                         <div id="pdf-controls"
                             class="hidden flex items-center gap-2 mb-4 bg-white dark:bg-gray-800 px-3 py-1.5 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 text-sm">
                             <button id="pdf-prev"
-                                class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors">
-                                <i class="ph-bold ph-caret-left"></i>
-                            </button>
-
+                                class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"><i
+                                    class="ph-bold ph-caret-left"></i></button>
                             <div class="flex items-center font-medium px-2">
                                 <input type="number" id="pdf-page-num" value="0" min="1"
                                     class="w-10 text-center bg-gray-100 dark:bg-gray-900 border border-transparent rounded outline-none focus:border-io-accent mx-1 text-sm py-0.5">
                                 <span class="text-gray-500 ml-1">/ <span id="pdf-page-count">0</span></span>
                             </div>
-
                             <button id="pdf-next"
-                                class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors">
-                                <i class="ph-bold ph-caret-right"></i>
-                            </button>
+                                class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"><i
+                                    class="ph-bold ph-caret-right"></i></button>
                         </div>
-
                         <canvas id="pdf-canvas" class="shadow-lg rounded-lg hidden max-w-full bg-white"></canvas>
                     </div>
 
@@ -300,19 +290,12 @@
                     <div id="view-graph" class="tab-content w-full h-full hidden flex-col">
                         <div class="flex justify-end gap-2 mb-3">
                             <button id="btn-regen-graph"
-                                class="px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1.5 shadow-sm font-medium transition-colors">
-                                <i class="ph-bold ph-arrows-clockwise text-io-accent"></i>
-                                Generate Graph
-                            </button>
-
+                                class="px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1.5 shadow-sm font-medium transition-colors"><i
+                                    class="ph-bold ph-arrows-clockwise text-io-accent"></i> Generate Graph</button>
                             <button
                                 class="btn-fullscreen px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1.5 shadow-sm font-medium transition-colors"
-                                data-target="view-graph">
-                                <i class="ph-bold ph-corners-out"></i>
-                                Fullscreen
-                            </button>
+                                data-target="view-graph"><i class="ph-bold ph-corners-out"></i> Fullscreen</button>
                         </div>
-
                         <div id="mindmap-container"
                             class="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl flex items-center justify-center bg-white dark:bg-gray-800 overflow-auto cursor-zoom-in shadow-inner relative">
                             <div class="text-center p-8">
@@ -320,7 +303,6 @@
                                     class="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
                                     <i class="ph-fill ph-tree-structure text-3xl"></i>
                                 </div>
-
                                 <h3 class="text-lg font-bold mb-1">Knowledge Graph</h3>
                                 <p class="text-sm text-gray-500">Click generate to map the relationships in this
                                     document.</p>
@@ -332,18 +314,18 @@
                     <div id="view-ppt" class="tab-content w-full h-full hidden flex-col">
                         <div class="flex justify-end gap-2 mb-3">
                             <button id="btn-regen-ppt"
-                                class="px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1.5 shadow-sm font-medium transition-colors">
-                                <i class="ph-bold ph-magic-wand text-io-accent"></i>
-                                Build Deck
-                            </button>
+                                class="px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1.5 shadow-sm font-medium transition-colors"><i
+                                    class="ph-bold ph-magic-wand text-io-accent"></i> Build Deck</button>
+
+                            <!-- NEW: DOWNLOAD BUTTON -->
+                            <button id="btn-download-ppt"
+                                class="hidden px-3 py-1.5 text-sm bg-io-accent text-white border border-transparent rounded-md hover:bg-teal-700 items-center gap-1.5 shadow-sm font-medium transition-colors"><i
+                                    class="ph-bold ph-download-simple"></i> Download .pptx</button>
 
                             <button
                                 class="btn-fullscreen px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-1.5 shadow-sm font-medium transition-colors"
-                                data-target="view-ppt">
-                                <i class="ph-bold ph-corners-out"></i> Fullscreen
-                            </button>
+                                data-target="view-ppt"><i class="ph-bold ph-corners-out"></i> Fullscreen</button>
                         </div>
-
                         <div id="ppt-container"
                             class="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl flex flex-col items-center justify-center bg-gray-100 dark:bg-gray-900 overflow-hidden relative shadow-inner">
                             <div id="ppt-slides"
@@ -353,7 +335,6 @@
                                         class="w-16 h-16 bg-purple-50 dark:bg-purple-900/30 text-purple-500 rounded-full flex items-center justify-center mx-auto mb-4">
                                         <i class="ph-fill ph-presentation-chart text-3xl"></i>
                                     </div>
-
                                     <h3 class="text-lg font-bold mb-1">Presentation Deck</h3>
                                     <p class="text-sm text-gray-500">Synthesize this 30-page paper into a 5-slide pitch.
                                     </p>
@@ -363,22 +344,17 @@
                             <div id="ppt-controls"
                                 class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-4 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg border border-gray-200 dark:border-gray-700 hidden">
                                 <button id="ppt-prev"
-                                    class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
-                                    <i class="ph-bold ph-caret-left"></i>
-                                </button>
-
-                                <span class="text-sm font-medium">Slide
-                                    <span id="ppt-current-num">0</span>
-                                    <span id="ppt-total-num">0</span>
-                                </span>
-
+                                    class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"><i
+                                        class="ph-bold ph-caret-left"></i></button>
+                                <span class="text-sm font-medium">Slide <span id="ppt-current-num">0</span> / <span
+                                        id="ppt-total-num">0</span></span>
                                 <button id="ppt-next"
-                                    class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors">
-                                    <i class="ph-bold ph-caret-right"></i>
-                                </button>
+                                    class="p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"><i
+                                        class="ph-bold ph-caret-right"></i></button>
                             </div>
                         </div>
                     </div>
+
                 </div>
             </section>
 
@@ -402,11 +378,10 @@
                             class="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center shrink-0 text-io-accent border border-teal-200 dark:border-teal-800">
                             <i class="ph-fill ph-robot text-lg"></i>
                         </div>
-
                         <div
                             class="bg-white dark:bg-gray-800 p-3.5 rounded-2xl rounded-tl-sm shadow-sm border border-gray-100 dark:border-gray-700 text-gray-800 dark:text-gray-200 leading-relaxed">
-                            Hello! This is MedAgent-X! Upload a medical paper, and ask me anything. I will extract
-                            insights and explicitly cite my sources.
+                            Hello! Upload a medical paper, and ask me anything. I will extract insights and explicitly
+                            cite my sources.
                         </div>
                     </div>
                 </div>
@@ -421,7 +396,6 @@
                             <i class="ph-bold ph-arrow-up"></i>
                         </button>
                     </form>
-
                     <div class="text-[10px] text-center text-gray-400 mt-2">AI can make mistakes. Verify clinical info.
                     </div>
                 </div>
@@ -439,7 +413,6 @@
         <div class="text-sm text-gray-500 mt-2">Running medical classifiers and chunking data.</div>
     </div>
 
-    <!-- Toast Notifications Container -->
     <div id="toast-container" class="fixed bottom-6 right-6 z-[110] flex flex-col gap-3 pointer-events-none"></div>
 
     <script src="script.js"></script>
