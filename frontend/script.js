@@ -1,366 +1,303 @@
-<!DOCTYPE html>
-<html lang="en" class="dark">
+import os
+import json
+import io
+import time
+import uuid
+import numpy as np
+import requests
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MedAgent-X | Agentic Medical AI</title>
-    <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        io: {
-                            100: '#f3f4f6',
-                            800: '#1f2937',
-                            900: '#0f172a', /* Deep modern slate */
-                            accent: '#0d9488', // Clinical Teal
-                        }
-                    },
-                    fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
-                    },
-                    animation: {
-                        'blob': 'blob 7s infinite',
-                        'fade-in': 'fadeIn 0.5s ease-out forwards',
-                        'slide-up': 'slideUp 0.3s ease-out forwards',
-                    },
-                    keyframes: {
-                        blob: {
-                            '0%': { transform: 'translate(0px, 0px) scale(1)' },
-                            '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
-                            '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
-                            '100%': { transform: 'translate(0px, 0px) scale(1)' },
-                        },
-                        fadeIn: {
-                            '0%': { opacity: '0' },
-                            '100%': { opacity: '1' },
-                        },
-                        slideUp: {
-                            '0%': { opacity: '0', transform: 'translateY(20px)' },
-                            '100%': { opacity: '1', transform: 'translateY(0)' },
-                        }
-                    }
-                }
-            }
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from dotenv import load_dotenv
+from pypdf import PdfReader
+from fastapi.responses import StreamingResponse
+from pptx import Presentation
+
+load_dotenv(override=True)
+
+app = FastAPI(title="MedAgent-X API")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+class QueryRequest(BaseModel):
+    query: str
+    doc_id: str
+
+class DocRequest(BaseModel):
+    doc_id: str
+
+vector_db = {}
+
+api_key = os.getenv("GEMINI_API_KEY", "")
+api_key = api_key.replace('"', '').replace("'", "").replace("Bearer ", "").strip()
+
+class AIResponse:
+    def __init__(self, text):
+        self.text = text
+
+def generate_with_retry(prompt: str, instruction: str, response_mime_type: str = "text/plain"):
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is missing. Please set it in Render Dashboard.")
+    
+    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+
+    headers = {
+        "x-goog-api-key": api_key, 
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "systemInstruction": {"parts": [{"text": instruction}]},
+
+        "contents": [{"parts": [{"text": prompt}]}],
+
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+        ],
+
+        "generationConfig": {
+            "temperature": 0.2,
+            "responseMimeType": response_mime_type
         }
-    </script>
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
-        rel="stylesheet">
+    }
+    
+    for attempt in range(2):
+        try:
+            res = requests.post(url, json=payload, headers=headers)
+            
+            if res.status_code == 429:
+                if attempt == 0:
+                    print("⚠️ Quota Hit! Pausing for 15s...")
+                    time.sleep(15)
+                    continue
+            
+            res.raise_for_status()
+            data = res.json()
+            
+            # Extract text safely
+            text_content = data["candidates"][0]["content"]["parts"][0]["text"]
+            return AIResponse(text_content)
+            
+        except Exception as e:
+            error_msg = res.text if 'res' in locals() and hasattr(res, 'text') else str(e)
+    
+            if attempt == 1:
+                raise Exception(f"Gemini API Error: {error_msg}")
 
-    <!-- Phosphor Icons -->
-    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+def get_embeddings(texts: list):
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is missing.")
+    
+    url = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents"
+    
+    headers = {
+        "x-goog-api-key": api_key,
+        "Content-Type": "application/json"
+    }
 
-    <!-- PDF.js -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+    requests_list = [
+        {
+            "model": "models/text-embedding-004",
+            "content": {"parts": [{"text": t}]}
+        } 
+        
+        for t in texts
+    ]
+    
+    res = requests.post(url, json={"requests": requests_list}, headers=headers)
 
-    <!-- Mermaid.js & Marked.js -->
-    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-</head>
+    if not res.ok:
+        raise Exception(f"Embedding API Error: {res.text}")
+        
+    data = res.json()
+    return [np.array(emb["values"]) for emb in data.get("embeddings", [])]
 
-<body
-    class="bg-gray-50 dark:bg-io-900 text-gray-900 dark:text-gray-100 h-screen w-screen overflow-hidden transition-colors relative">
-    <!-- VIEW 1: LANDING PAGE -->
-    <div id="landing-view"
-        class="absolute inset-0 flex flex-col z-20 overflow-y-auto bg-gray-50 dark:bg-io-900 transition-opacity duration-500">
-        <div class="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
-            <div
-                class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-teal-400/30 rounded-full mix-blend-multiply blur-3xl opacity-70 animate-blob">
-            </div>
-            <div
-                class="absolute top-[20%] right-[-10%] w-96 h-96 bg-blue-400/30 rounded-full mix-blend-multiply blur-3xl opacity-70 animate-blob animation-delay-2000">
-            </div>
-        </div>
+@app.get("/")
+def read_root():
+    return {
+        "status": "MedAgent-X Enterprise Backend Online"
+    }
 
-        <nav class="w-full max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
-            <div class="flex items-center gap-2 text-2xl font-bold">
-                <div
-                    class="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-400 to-io-accent flex items-center justify-center text-white">
-                    <i class="ph-fill ph-stethoscope"></i></div>
-                <span>MedAgent<span class="text-io-accent">-X</span></span>
-            </div>
+@app.post("/api/upload")
+async def upload_pdf(file: UploadFile = File(...)):
+    if not file.filename.endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Must be a PDF file.")
+        
+    try:
+        content = await file.read()
+        pdf = PdfReader(io.BytesIO(content))
+        
+        full_text = ""
 
-            <div class="flex items-center gap-6 font-medium text-sm">
-                <a href="#" class="hover:text-io-accent transition-colors hidden sm:block">Features</a>
-                <a href="#" class="hover:text-io-accent transition-colors hidden sm:block">Architecture</a>
+        for i, page in enumerate(pdf.pages): 
+            text = page.extract_text()
+            if text:
+                full_text = full_text + f"\n--- [PAGE {i+1}] ---\n{text.strip()}\n"
+                
+        if not full_text:
+            raise HTTPException(status_code=400, detail="Could not extract text from PDF.")
 
-                <div
-                    class="flex items-center gap-2 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700">
-                    <div id="landing-status-indicator"
-                        class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]"></div>
-                    <span id="landing-status-text" class="text-xs uppercase tracking-wider text-gray-500">Backend
-                        Offline</span>
-                </div>
+        first_page = full_text[:1000]
+        prompt = f"Analyze this text snippet: \"{first_page}\". Is this highly likely related to Medical, Health, or Biological sciences? Reply with exactly YES or NO."
+        response = generate_with_retry(prompt, "You are a strict medical classifier.")
+        
+        if "YES" not in response.text.strip().upper():
+            raise HTTPException(status_code=403, detail="Document rejected: Content is not medical research.")
 
-                <button id="btn-theme-landing" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><i
-                        class="ph ph-sun text-xl"></i></button>
-            </div>
-        </nav>
+        chunk_size = 1500
+        chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)][:60]
 
-        <main class="flex-1 flex flex-col items-center justify-center text-center px-4 mt-10 mb-20 animate-slide-up">
-            <div
-                class="inline-block px-4 py-1.5 rounded-full border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 text-sm font-semibold mb-6">
-                ✨ Enterprise RAG Architecture
-            </div>
+        embeddings = get_embeddings(chunks)
 
-            <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 max-w-4xl leading-tight">
-                Decode Medical Research <br class="hidden md:block" />
-                <span class="text-transparent bg-clip-text bg-gradient-to-r from-teal-500 to-blue-500">in
-                    Seconds.</span>
-            </h1>
+        doc_id = str(uuid.uuid4())
 
-            <p class="text-lg md:text-xl text-gray-600 dark:text-gray-400 max-w-2xl mb-12">
-                Upload dense clinical trials. Our Agentic AI builds interactive knowledge graphs and generates
-                downloadable presentation decks instantly.
-            </p>
+        vector_db[doc_id] = {
+            "chunks": chunks,
+            "embeddings": embeddings,
+            "full_text": full_text[:25000],
+            "ppt": None,
+            "graph": None
+        }
 
-            <div class="w-full max-w-2xl">
-                <label for="hero-file-upload"
-                    class="group relative flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-3xl bg-white/40 dark:bg-gray-800/40 backdrop-blur-md hover:border-io-accent cursor-pointer shadow-xl">
-                    <div class="flex flex-col items-center justify-center pt-5 pb-6">
-                        <div
-                            class="w-20 h-20 mb-4 rounded-full bg-teal-50 dark:bg-teal-900/50 flex items-center justify-center text-io-accent group-hover:scale-110 transition-transform">
-                            <i class="ph ph-upload-simple text-4xl"></i>
-                        </div>
+        return {
+            "doc_id": doc_id, 
+            "filename": file.filename, 
+            "pages_count": len(pdf.pages)
+        }
 
-                        <p class="mb-2 text-xl font-semibold">Click to upload or drag and drop</p>
-                        <p class="text-sm text-gray-500">Medical PDFs only (Select multiple!)</p>
-                    </div>
+    except Exception as e:
+        print(f"Upload Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-                    <input id="hero-file-upload" type="file" class="hidden" accept="application/pdf" multiple />
-                </label>
-            </div>
+@app.post("/api/chat")
+async def chat_with_agent(req: QueryRequest):
+    if req.doc_id not in vector_db:
+        raise HTTPException(status_code=404, detail="Session expired. Please re-upload the document.")
+    
+    doc_data = vector_db[req.doc_id]
+    
+    try:
+        query_emb = get_embeddings([req.query])[0]
+        
+        similarities = [np.dot(query_emb, doc_emb) / (np.linalg.norm(query_emb) * np.linalg.norm(doc_emb)) for doc_emb in doc_data["embeddings"]]
+        top_indices = np.argsort(similarities)[-4:][::-1]
+        relevant_context = "\n\n...\n\n".join([doc_data["chunks"][i] for i in top_indices])
+        
+        prompt = f"User Query: {req.query}\n\nRelevant Document Context:\n{relevant_context}"
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mt-20">
-                <div class="flex flex-col items-center p-6 rounded-2xl glass-panel">
-                    <i class="ph-fill ph-shield-check text-4xl text-teal-500 mb-4"></i>
-                    <h3 class="font-bold">Medical Verification</h3>
-                </div>
+        instruction = """You are MedAgent-X, an advanced Clinical AI and versatile assistant.
+        1. If the query relates to the provided Document Context, answer using the context and explicitly cite the [PAGE X] markers.
+        2. If the query is a general question (e.g., coding, math, casual conversation), ignore the document context and answer using your broad general knowledge.
+        3. Always be professional, clear, and highly helpful."""
+        
+        response = generate_with_retry(prompt, instruction)
 
-                <div class="flex flex-col items-center p-6 rounded-2xl glass-panel">
-                    <i class="ph-fill ph-tree-structure text-4xl text-blue-500 mb-4"></i>
-                    <h3 class="font-bold">Knowledge Graphs</h3>
-                </div>
+        return {
+            "reply": response.text
+        }
 
-                <div class="flex flex-col items-center p-6 rounded-2xl glass-panel">
-                    <i class="ph-fill ph-presentation-chart text-4xl text-purple-500 mb-4"></i>
-                    <h3 class="font-bold">PPTX Exports</h3>
-                </div>
-            </div>
-        </main>
-    </div>
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-    <!-- VIEW 2: APP WORKSPACE -->
-    <div id="app-workspace" class="hidden flex-col h-full w-full z-30 bg-white dark:bg-io-900">
-        <header
-            class="h-14 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 bg-gray-50 dark:bg-gray-900">
+@app.post("/api/generate-graph")
+async def generate_graph(req: DocRequest):
+    try:
+        if req.doc_id not in vector_db:
+            raise HTTPException(status_code=404, detail="Document not found.")
+        
+        if vector_db[req.doc_id]["graph"]:
+            return {"mermaid_code": vector_db[req.doc_id]["graph"]}
 
-            <div class="flex items-center gap-4">
-                <button id="btn-home" class="text-gray-500 hover:text-io-accent">
-                    <i class="ph-bold ph-arrow-left text-xl"></i>
-                </button>
+        prompt = f"Analyze this medical text and create a Mermaid.js mindmap showing core disease, symptoms, treatments. Start with 'mindmap' on line 1. Keep nodes short. Text: {vector_db[req.doc_id]['full_text'][:15000]}"
+        response = generate_with_retry(prompt, "Output ONLY valid mermaid mindmap code. No markdown blocks.")
+        
+        mermaid_code = response.text.replace("```mermaid", "").replace("```", "").strip()
+        vector_db[req.doc_id]["graph"] = mermaid_code
 
-                <div class="flex items-center gap-2 text-io-accent font-bold">
-                    <div
-                        class="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-400 to-io-accent flex items-center justify-center text-white">
-                        <i class="ph-fill ph-stethoscope"></i>
-                    </div>
+        return {
+            "mermaid_code": mermaid_code
+        }
 
-                    <span>MedAgent
-                        <span class="text-xs font-normal text-gray-500 ml-1">Workspace</span>
-                    </span>
-                </div>
-            </div>
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Graph Generation Failed")
 
-            <div class="flex items-center gap-4">
-                <div
-                    class="flex items-center gap-2 bg-white dark:bg-gray-800 px-3 py-1 rounded-full border border-gray-200 dark:border-gray-700">
-                    <div id="api-status-indicator" class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]">
-                    </div>
-                    <span id="api-status-text" class="text-xs font-medium uppercase">Connecting...</span>
-                </div>
+@app.post("/api/generate-ppt")
+async def generate_ppt(req: DocRequest):
+    try:
+        if req.doc_id not in vector_db:
+            raise HTTPException(status_code=404, detail="Document not found.")
 
-                <button id="btn-theme-app" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800">
-                    <i class="ph ph-sun text-xl"></i>
-                </button>
-            </div>
-        </header>
+        if vector_db[req.doc_id]["ppt"]:
+            return {
+                "slides": vector_db[req.doc_id]["ppt"]
+            }
 
-        <main class="flex flex-1 overflow-hidden">
-            <aside class="w-64 border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 flex flex-col">
-                <div class="p-4 border-b border-gray-200 dark:border-gray-800">
-                    <label for="sidebar-file-upload"
-                        class="cursor-pointer flex items-center justify-center gap-2 bg-io-accent hover:bg-teal-700 text-white py-2.5 px-4 rounded-lg text-sm font-medium w-full shadow-md"><i
-                            class="ph-bold ph-plus"></i> New Document</label>
-                    <input type="file" id="sidebar-file-upload" accept="application/pdf" class="hidden" multiple>
-                </div>
+        prompt = f"Create a 5 slide presentation summarizing core findings. Schema: [{{ 'title': 'Title', 'bullets': ['pt1', 'pt2'], 'icon': 'ph-pill' }}]. Text: {vector_db[req.doc_id]['full_text'][:15000]}"
+        response = generate_with_retry(prompt, "Output strictly a JSON array.", "application/json")
+        
+        clean_text = response.text.replace("```json", "").replace("```", "").strip()
+        slides = json.loads(clean_text)
+        vector_db[req.doc_id]["ppt"] = slides
 
-                <div class="p-4 pb-2">
-                    <h2 class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Active Sources</h2>
-                </div>
+        return {
+            "slides": slides
+        }
 
-                <div id="file-list" class="flex-1 overflow-y-auto px-3 pb-3 space-y-1.5"></div>
-            </aside>
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="PPT Generation Failed")
 
-            <section class="flex-1 flex flex-col relative">
-                <div
-                    class="flex items-center justify-center gap-2 border-b border-gray-200 dark:border-gray-800 pt-2 px-4 bg-gray-50 dark:bg-gray-900">
-                    <button
-                        class="tab-btn active text-io-accent border-b-2 border-io-accent px-4 py-2.5 font-medium flex gap-2"
-                        data-target="view-paper">
-                        <i class="ph ph-file-text text-lg"></i>
-                        Paper
-                    </button>
+@app.post("/api/export-ppt")
+async def export_ppt(req: DocRequest):
+    try:
+        if req.doc_id not in vector_db or not vector_db[req.doc_id].get("ppt"):
+            raise HTTPException(status_code=404, detail="Please generate the PPT in the UI first.")
+            
+            slides_data = vector_db[req.doc_id]["ppt"]
+            prs = Presentation()
 
-                    <button
-                        class="tab-btn text-gray-500 border-b-2 border-transparent px-4 py-2.5 font-medium flex gap-2"
-                        data-target="view-graph">
-                        <i class="ph ph-graph text-lg"></i>
-                        Graph
-                    </button>
+        for slide_data in slides_data:
+            slide = prs.slides.add_slide(prs.slide_layouts[1]) 
+            title_shape = slide.shapes.title
+            
+            if title_shape:
+                title_shape.text = slide_data.get("title", "Slide")
+                
+                body_shape = slide.shapes.placeholders[1]
+                t = body_shape.text_frame
+                bullets = slide_data.get("bullets", [])
+                
+                if bullets:
+                    t.text = bullets[0]
+                    
+                    for bullet in bullets[1:]:
+                        p = t.add_paragraph()
+                        p.text = bullet
+                        p.level = 0
+                        
+        ppt_stream = io.BytesIO()
+        prs.save(ppt_stream)
+        ppt_stream.seek(0)
 
-                    <button
-                        class="tab-btn text-gray-500 border-b-2 border-transparent px-4 py-2.5 font-medium flex gap-2"
-                        data-target="view-ppt">
-                        <i class="ph ph-presentation-chart text-lg"></i>
-                        Pitch Deck
-                    </button>
-                </div>
-
-                <div class="flex-1 overflow-auto p-4 bg-gray-50/50 dark:bg-gray-900/50 relative">
-                    <div id="view-paper" class="tab-content w-full h-full flex flex-col items-center">
-                        <div id="pdf-controls"
-                            class="hidden flex items-center gap-2 mb-4 bg-white dark:bg-gray-800 px-3 py-1.5 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 text-sm">
-                            <button id="pdf-prev" class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md">
-                                <i class="ph-bold ph-caret-left"></i>
-                            </button>
-
-                            <div class="flex items-center font-medium px-2">
-                                <input type="number" id="pdf-page-num" value="0" min="1"
-                                    class="w-10 text-center bg-gray-100 dark:bg-gray-900 border border-transparent rounded">
-                                <span class="ml-1">/ <span id="pdf-page-count">0</span></span>
-                            </div>
-
-                            <button id="pdf-next" class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md">
-                                <i class="ph-bold ph-caret-right"></i>
-                            </button>
-                        </div>
-
-                        <canvas id="pdf-canvas" class="shadow-lg rounded-lg hidden max-w-full bg-white"></canvas>
-
-                    </div>
-
-                    <div id="view-graph" class="tab-content w-full h-full hidden flex-col">
-                        <div class="flex justify-end gap-2 mb-3">
-                            <button id="btn-regen-graph"
-                                class="px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md font-medium">
-                                <i class="ph-bold ph-arrows-clockwise text-io-accent"></i>
-                                Generate
-                            </button>
-
-                            <button
-                                class="btn-fullscreen px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md font-medium"
-                                data-target="view-graph">
-                                Fullscreen
-                            </button>
-                        </div>
-
-                        <div id="mindmap-container"
-                            class="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl flex items-center justify-center bg-white dark:bg-gray-800 shadow-inner overflow-auto">
-                            <div class="text-gray-500 text-sm text-center">Click generate to map document.</div>
-                        </div>
-                    </div>
-
-                    <div id="view-ppt" class="tab-content w-full h-full hidden flex-col">
-                        <div class="flex justify-end gap-2 mb-3">
-                            <button id="btn-regen-ppt"
-                                class="px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md font-medium">
-                                <i class="ph-bold ph-magic-wand text-io-accent"></i>
-                                Build Deck
-                            </button>
-
-                            <button id="btn-download-ppt"
-                                class="hidden px-3 py-1.5 text-sm bg-io-accent text-white rounded-md font-medium">
-                                <i class="ph-bold ph-download-simple"></i>
-                                Download .pptx
-                            </button>
-
-                            <button
-                                class="btn-fullscreen px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md font-medium"
-                                data-target="view-ppt">
-                                Fullscreen
-                            </button>
-                        </div>
-
-                        <div id="ppt-container"
-                            class="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl flex flex-col bg-gray-100 dark:bg-gray-900 overflow-hidden relative shadow-inner">
-                            <div id="ppt-slides" class="w-full h-full flex items-center justify-center p-8">
-                                <div class="text-gray-500 text-sm">Synthesize paper into a pitch.</div>
-                            </div>
-
-                            <div id="ppt-controls"
-                                class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-4 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg hidden">
-                                <button id="ppt-prev" class="hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded-full">
-                                    <i class="ph-bold ph-caret-left"></i>
-                                </button>
-
-                                <span class="text-sm font-medium">Slide
-                                    <span id="ppt-current-num">0</span> /
-                                    <span id="ppt-total-num">0</span>
-                                </span>
-
-                                <button id="ppt-next" class="hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded-full">
-                                    <i class="ph-bold ph-caret-right"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <aside
-                class="w-80 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col shadow-[-4px_0_24px_rgba(0,0,0,0.05)]">
-                <div
-                    class="p-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex items-center gap-2">
-                    <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                    <h2 class="text-sm font-bold tracking-wide">Hybrid AI Agent</h2>
-                </div>
-
-                <div id="chat-history"
-                    class="flex-1 overflow-y-auto p-4 space-y-4 text-sm bg-gray-50/30 dark:bg-gray-900/30"></div>
-
-                <div class="p-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
-                    <form id="chat-form" class="relative">
-                        <textarea id="chat-input" rows="1" placeholder="Ask anything (medical or general)..."
-                            class="w-full bg-gray-100 dark:bg-gray-800 border-none rounded-xl py-3 pl-4 pr-12 text-sm resize-none outline-none focus:ring-1 focus:ring-io-accent block"
-                            style="min-height: 44px;"></textarea>
-
-                        <button type="submit"
-                            class="absolute bottom-2 right-2 p-1.5 bg-io-accent text-white rounded-lg">
-                            <i class="ph-bold ph-arrow-up"></i>
-                        </button>
-                    </form>
-                </div>
-            </aside>
-        </main>
-    </div>
-
-    <!-- Overlays -->
-    <div id="loading-overlay"
-        class="fixed inset-0 bg-white/80 dark:bg-gray-900/80 z-[100] hidden flex-col items-center justify-center backdrop-blur-sm">
-        <div class="spinner mb-5 w-12 h-12 border-4"></div>
-        <div id="loading-text" class="text-lg font-semibold tracking-tight text-center">Processing Document...</div>
-    </div>
-
-    <div id="toast-container" class="fixed bottom-6 right-6 z-[110] flex flex-col gap-3 pointer-events-none"></div>
-
-    <script src="script.js"></script>
-</body>
-
-</html>
+        return StreamingResponse(
+            ppt_stream,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={
+                "Content-Disposition": f"attachment; filename=MedAgent_Export.pptx"
+            }
+        )
+        
+    except Exception as e:
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail="Export Failed")
