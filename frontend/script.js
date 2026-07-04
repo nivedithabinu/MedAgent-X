@@ -1,6 +1,6 @@
 /** APPLICATION STATE **/
 const AppState = {
-    backendUrl: 'https://medagent-x-backend.onrender.com',
+    backendUrl: 'https://medagent-x.onrender.com/',
     documents: [], // { id, name, arrayBuffer, pagesCount, mindmapCode, pptData }
     activeDocId: null,
     pdfDoc: null,
