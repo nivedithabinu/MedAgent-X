@@ -6,3 +6,4 @@ python-multipart
 pypdf
 python-dotenv
 numpy
+python-pptx
