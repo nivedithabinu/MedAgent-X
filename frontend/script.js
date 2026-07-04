@@ -1,691 +1,366 @@
-/** APPLICATION STATE **/
-const AppState = {
-    backendUrl: 'https://medagent-x.onrender.com',
-    documents: [],
-    activeDocId: null,
-    pdfDoc: null,
-    pageNum: 1,
-    pptSlides: [],
-    currentPptSlide: 0,
-};
+<!DOCTYPE html>
+<html lang="en" class="dark">
 
-// DOM Elements
-const DOM = {
-    landingView: document.getElementById('landing-view'),
-    appWorkspace: document.getElementById('app-workspace'),
-
-    apiStatusIndicators: [document.getElementById('api-status-indicator'), document.getElementById('landing-status-indicator')],
-    apiStatusTexts: [document.getElementById('api-status-text'), document.getElementById('landing-status-text')],
-
-    btnThemeLanding: document.getElementById('btn-theme-landing'),
-    btnThemeApp: document.getElementById('btn-theme-app'),
-    btnHome: document.getElementById('btn-home'),
-
-    heroFileUpload: document.getElementById('hero-file-upload'),
-    sidebarFileUpload: document.getElementById('sidebar-file-upload'),
-    fileList: document.getElementById('file-list'),
-
-    tabBtns: document.querySelectorAll('.tab-btn'),
-    tabContents: document.querySelectorAll('.tab-content'),
-
-    pdfCanvas: document.getElementById('pdf-canvas'),
-    pdfControls: document.getElementById('pdf-controls'),
-    pdfPrev: document.getElementById('pdf-prev'),
-    pdfNext: document.getElementById('pdf-next'),
-    pdfPageNum: document.getElementById('pdf-page-num'),
-    pdfPageCount: document.getElementById('pdf-page-count'),
-
-    mindmapContainer: document.getElementById('mindmap-container'),
-    btnRegenGraph: document.getElementById('btn-regen-graph'),
-
-    pptContainer: document.getElementById('ppt-container'),
-    pptSlidesContainer: document.getElementById('ppt-slides'),
-    pptControls: document.getElementById('ppt-controls'),
-    pptPrev: document.getElementById('ppt-prev'),
-    pptNext: document.getElementById('ppt-next'),
-    pptCurrentNum: document.getElementById('ppt-current-num'),
-    pptTotalNum: document.getElementById('ppt-total-num'),
-
-    btnRegenPpt: document.getElementById('btn-regen-ppt'),
-    btnDownloadPpt: document.getElementById('btn-download-ppt'),
-
-    chatHistory: document.getElementById('chat-history'),
-    chatForm: document.getElementById('chat-form'),
-    chatInput: document.getElementById('chat-input'),
-
-    loadingOverlay: document.getElementById('loading-overlay'),
-    loadingText: document.getElementById('loading-text'),
-
-    toastContainer: document.getElementById('toast-container')
-};
-
-/** TOAST NOTIFICATION SYSTEM **/
-function showToast(message, type = 'info') {
-    const toast = document.createElement('div');
-
-    let bgClass = 'bg-gray-800 dark:bg-gray-700';
-    let icon = '<i class="ph-fill ph-info text-blue-400"></i>';
-
-    if (type === 'error') {
-        bgClass = 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800';
-        icon = '<i class="ph-fill ph-warning-circle text-red-500"></i>';
-    }
-
-    else if (type === 'success') {
-        bgClass = 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800';
-        icon = '<i class="ph-fill ph-check-circle text-green-500"></i>';
-    }
-
-    toast.className = `flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg ${bgClass} text-sm font-medium text-gray-800 dark:text-gray-100 transform translate-y-10 opacity-0 transition-all duration-300 pointer-events-auto max-w-sm`;
-    toast.innerHTML = `${icon} <span>${message}</span>`;
-
-    if (DOM.toastContainer)
-        DOM.toastContainer.appendChild(toast);
-
-    setTimeout(() => toast.classList.remove('translate-y-10', 'opacity-0'), 10);
-    setTimeout(() => {
-        toast.classList.add('translate-y-10', 'opacity-0');
-        setTimeout(() => toast.remove(), 300);
-    }, 5000);
-}
-
-/** INITIALIZATION & THEME **/
-try {
-    mermaid.initialize({
-        startOnLoad: false,
-        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default'
-    });
-}
-
-catch (e) {
-
-}
-
-function toggleTheme() {
-    document.documentElement.classList.toggle('dark');
-
-    try {
-        mermaid.initialize({
-            theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default'
-        });
-    }
-
-    catch (e) {
-
-    }
-
-    if (AppState.activeDocId)
-        renderMindMap(false);
-}
-
-if (DOM.btnThemeLanding)
-    DOM.btnThemeLanding.addEventListener('click', toggleTheme);
-
-if (DOM.btnThemeApp)
-    DOM.btnThemeApp.addEventListener('click', toggleTheme);
-
-if (DOM.btnHome) {
-    DOM.btnHome.addEventListener('click', () => {
-        DOM.appWorkspace.classList.add('hidden');
-        DOM.landingView.classList.remove('hidden');
-        DOM.landingView.classList.add('flex');
-    });
-}
-
-function openWorkspace() {
-    DOM.landingView.classList.remove('flex');
-    DOM.landingView.classList.add('hidden');
-    DOM.appWorkspace.classList.remove('hidden');
-    DOM.appWorkspace.classList.add('flex');
-}
-
-document.querySelectorAll('.btn-fullscreen').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-        const targetId = e.target.closest('button').dataset.target;
-        const container = document.getElementById(targetId);
-
-        if (container)
-            container.classList.toggle('fullscreen-mode');
-
-        const icon = e.target.closest('button').querySelector('i');
-
-        if (icon) {
-            icon.classList.toggle('ph-corners-out');
-            icon.classList.toggle('ph-corners-in');
-        }
-    });
-});
-
-DOM.tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-        DOM.tabBtns.forEach(b => {
-            b.classList.remove('active', 'border-b-2', 'border-io-accent', 'text-io-accent');
-            b.classList.add('text-gray-500', 'border-transparent');
-        });
-
-        btn.classList.add('active', 'border-b-2', 'border-io-accent', 'text-io-accent');
-        btn.classList.remove('text-gray-500', 'border-transparent');
-
-        const targetId = btn.dataset.target;
-
-        DOM.tabContents.forEach(content => {
-            content.classList.toggle('hidden', content.id !== targetId);
-            content.classList.toggle('flex', content.id === targetId);
-        });
-
-        if (targetId === 'view-graph' && AppState.activeDocId)
-            renderMindMap(false);
-    });
-});
-
-function showOverlay(text) {
-    if (DOM.loadingText)
-        DOM.loadingText.innerText = text;
-
-    if (DOM.loadingOverlay) {
-        DOM.loadingOverlay.classList.remove('hidden');
-        DOM.loadingOverlay.classList.add('flex');
-    }
-}
-function hideOverlay() {
-    if (DOM.loadingOverlay) {
-        DOM.loadingOverlay.classList.add('hidden');
-        DOM.loadingOverlay.classList.remove('flex');
-    }
-}
-
-async function checkBackendConnection() {
-    try {
-        const res = await fetch(`${AppState.backendUrl}/`);
-
-        if (res.ok) {
-            DOM.apiStatusIndicators.forEach(el => {
-                if (el) {
-                    el.classList.replace('bg-red-500', 'bg-green-500');
-                    el.classList.replace('shadow-[0_0_8px_#ef4444]', 'shadow-[0_0_8px_#22c55e]');
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MedAgent-X | Agentic Medical AI</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        io: {
+                            100: '#f3f4f6',
+                            800: '#1f2937',
+                            900: '#0f172a', /* Deep modern slate */
+                            accent: '#0d9488', // Clinical Teal
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    animation: {
+                        'blob': 'blob 7s infinite',
+                        'fade-in': 'fadeIn 0.5s ease-out forwards',
+                        'slide-up': 'slideUp 0.3s ease-out forwards',
+                    },
+                    keyframes: {
+                        blob: {
+                            '0%': { transform: 'translate(0px, 0px) scale(1)' },
+                            '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
+                            '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
+                            '100%': { transform: 'translate(0px, 0px) scale(1)' },
+                        },
+                        fadeIn: {
+                            '0%': { opacity: '0' },
+                            '100%': { opacity: '1' },
+                        },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(20px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    }
                 }
-            });
-
-            DOM.apiStatusTexts.forEach(el => {
-                if (el)
-                    el.textContent = "Backend Online";
-            });
-        }
-    }
-
-    catch (e) {
-        DOM.apiStatusIndicators.forEach(el => {
-            if (el) {
-                el.classList.replace('bg-green-500', 'bg-red-500');
-                el.classList.replace('shadow-[0_0_8px_#22c55e]', 'shadow-[0_0_8px_#ef4444]');
-            }
-        });
-
-        DOM.apiStatusTexts.forEach(el => {
-            if (el)
-                el.textContent = "Backend Offline";
-        });
-    }
-}
-
-setTimeout(checkBackendConnection, 500);
-
-/** DOCUMENT UPLOAD & PARSING **/
-async function handleFileUpload(files) {
-    if (!files || files.length === 0)
-        return;
-
-    for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-
-        if (file.type !== "application/pdf") {
-            showToast(`Skipped ${file.name}: Not a PDF.`, "error");
-            continue;
-        }
-
-        showOverlay(`Processing ${file.name}...\nChunking & Embedding Document...`);
-
-        const formData = new FormData();
-        formData.append('file', file);
-
-        try {
-            const res = await fetch(`${AppState.backendUrl}/api/upload`, {
-                method: 'POST',
-                body: formData
-            });
-
-            if (!res.ok) {
-                const errorText = await res.json().catch(() => ({ detail: "Server connection failed." }));
-                throw new Error(errorText.detail || "Upload failed");
-            }
-
-            const data = await res.json();
-            const arrayBuffer = await file.arrayBuffer();
-
-            AppState.documents.push({
-                id: data.doc_id,
-                name: file.name,
-                arrayBuffer: arrayBuffer,
-                pagesCount: data.pages_count,
-                mindmapCode: null,
-                pptData: null
-            });
-
-            showToast(`${file.name} Vectorized successfully!`, "success");
-        }
-
-        catch (err) {
-            showToast(`Failed ${file.name}: ${err.message}`, "error");
-        }
-    }
-
-    updateSidebarList();
-    hideOverlay();
-
-    if (DOM.landingView && !DOM.landingView.classList.contains('hidden'))
-        openWorkspace();
-
-    // Auto-select the most recently uploaded document
-    if (AppState.documents.length > 0) {
-        selectDocument(AppState.documents[AppState.documents.length - 1].id);
-    }
-}
-
-if (DOM.heroFileUpload)
-    DOM.heroFileUpload.addEventListener('change', (e) => {
-        handleFileUpload(e.target.files);
-        e.target.value = '';
-    });
-
-if (DOM.sidebarFileUpload)
-    DOM.sidebarFileUpload.addEventListener('change', (e) => {
-        handleFileUpload(e.target.files);
-        e.target.value = '';
-    });
-
-const fallbackUpload = document.getElementById('file-upload');
-if (fallbackUpload)
-    fallbackUpload.addEventListener('change', (e) => {
-        handleFileUpload(e.target.files);
-        e.target.value = '';
-    });
-
-function updateSidebarList() {
-    if (AppState.documents.length === 0)
-        return;
-
-    if (DOM.fileList) {
-        DOM.fileList.innerHTML = AppState.documents.map(doc => {
-            const isActive = AppState.activeDocId === doc.id;
-            return `
-            <div onclick="selectDocument('${doc.id}')" class="file-item cursor-pointer p-3 rounded-xl text-sm border ${isActive ? 'bg-white dark:bg-gray-800 border-teal-200 dark:border-teal-800/50 shadow-sm' : 'border-transparent hover:bg-gray-100 dark:hover:bg-gray-800/50'} transition-all flex items-center gap-3">
-                <div class="w-8 h-8 rounded-lg ${isActive ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'} flex items-center justify-center shrink-0 transition-colors"><i class="${isActive ? 'ph-fill' : 'ph'} ph-file-pdf text-lg"></i></div>
-                <div class="flex flex-col overflow-hidden">
-                    <span class="truncate font-medium ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'}">${doc.name}</span>
-                    <span class="text-[10px] text-gray-400 uppercase tracking-wide">${doc.pagesCount} Pages Analyzed</span>
-                </div>
-            </div>`;
-        }).join('');
-    }
-}
-
-async function selectDocument(docId) {
-    AppState.activeDocId = docId;
-    updateSidebarList();
-
-    const doc = AppState.documents.find(d => d.id === docId);
-    if (!doc)
-        return;
-
-    if (DOM.pdfCanvas)
-        DOM.pdfCanvas.classList.remove('hidden');
-
-    if (DOM.pdfControls) {
-        DOM.pdfControls.classList.remove('hidden');
-        DOM.pdfControls.classList.add('flex');
-    }
-
-    AppState.pdfDoc = await pdfjsLib.getDocument({
-        data: doc.arrayBuffer
-    }).promise;
-
-    AppState.pageNum = 1;
-
-    if (DOM.pdfPageCount)
-        DOM.pdfPageCount.textContent = AppState.pdfDoc.numPages;
-
-    renderPage(AppState.pageNum);
-
-    if (DOM.mindmapContainer)
-        DOM.mindmapContainer.innerHTML = `<div class="text-center p-8"><div class="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4"><i class="ph-fill ph-tree-structure text-3xl"></i></div><h3 class="text-lg font-bold mb-1">Knowledge Graph</h3><p class="text-sm text-gray-500">Click generate to map relationships.</p></div>`;
-
-    if (DOM.pptSlidesContainer)
-        DOM.pptSlidesContainer.innerHTML = `<div class="text-center p-8"><div class="w-16 h-16 bg-purple-50 dark:bg-purple-900/30 text-purple-500 rounded-full flex items-center justify-center mx-auto mb-4"><i class="ph-fill ph-presentation-chart text-3xl"></i></div><h3 class="text-lg font-bold mb-1">Presentation Deck</h3><p class="text-sm text-gray-500">Synthesize this paper into a pitch.</p></div>`;
-
-    if (DOM.pptControls)
-        DOM.pptControls.classList.add('hidden');
-
-    if (DOM.btnDownloadPpt)
-        DOM.btnDownloadPpt.classList.add('hidden');
-
-    if (DOM.chatHistory)
-        DOM.chatHistory.innerHTML = '';
-
-    appendMessage('bot', `I have analyzed **${doc.name}**. Ask me any clinical questions, and I will explicitly cite my sources.`);
-}
-
-function renderPage(num) {
-    AppState.pdfDoc.getPage(num).then(function (page) {
-        if (!DOM.pdfCanvas)
-            return;
-
-        const containerWidth = DOM.pdfCanvas.parentElement.clientWidth - 32;
-        const unscaledViewport = page.getViewport({ scale: 1.0 });
-        const scale = Math.min(1.5, containerWidth / unscaledViewport.width);
-        const viewport = page.getViewport({ scale: scale });
-
-        DOM.pdfCanvas.height = viewport.height;
-        DOM.pdfCanvas.width = viewport.width;
-
-        page.render({
-            canvasContext: DOM.pdfCanvas.getContext('2d'), viewport: viewport
-        });
-    });
-
-    if (DOM.pdfPageNum)
-        DOM.pdfPageNum.value = num;
-}
-
-if (DOM.pdfPageNum) {
-    DOM.pdfPageNum.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            let desiredPage = parseInt(e.target.value);
-
-            if (desiredPage >= 1 && desiredPage <= AppState.pdfDoc.numPages) {
-                AppState.pageNum = desiredPage;
-                renderPage(AppState.pageNum);
-                e.target.blur();
-            }
-
-            else {
-                e.target.value = AppState.pageNum;
             }
         }
-    });
-}
+    </script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
 
-if (DOM.pdfPrev)
-    DOM.pdfPrev.addEventListener('click', () => { if (AppState.pageNum > 1) { AppState.pageNum--; renderPage(AppState.pageNum); } });
+    <!-- Phosphor Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
 
-if (DOM.pdfNext)
-    DOM.pdfNext.addEventListener('click', () => { if (AppState.pageNum < AppState.pdfDoc.numPages) { AppState.pageNum++; renderPage(AppState.pageNum); } });
+    <!-- PDF.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
 
-/** API CALL HELPER **/
-async function callBackend(endpoint, payload) {
-    try {
-        const res = await fetch(`${AppState.backendUrl}/api/${endpoint}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    <!-- Mermaid.js & Marked.js -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
 
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({ detail: "Server Error or Timeout" }));
-            throw new Error(err.detail || `HTTP ${res.status}`);
-        }
-
-        return await res.json();
-    }
-
-    catch (e) {
-        if (e.message.includes("Failed to fetch"))
-            throw new Error("Connection dropped. Ensure backend is running.");
-        throw e;
-    }
-}
-
-/** FEATURE: KNOWLEDGE GRAPH **/
-if (DOM.btnRegenGraph)
-    DOM.btnRegenGraph.addEventListener('click', () => renderMindMap(true));
-
-async function renderMindMap(forceRegenerate = false) {
-    const doc = AppState.documents.find(d => d.id === AppState.activeDocId);
-
-    if (!doc)
-        return showToast("Select a document first.", "error");
-
-    if (forceRegenerate || !doc.mindmapCode) {
-        showOverlay("Analyzing Medical Concepts...\nDrawing Knowledge Graph...");
-
-        try {
-            const data = await callBackend('generate-graph', { doc_id: doc.id });
-            doc.mindmapCode = data.mermaid_code;
-        }
-
-        catch (e) {
-            showToast(e.message, "error"); hideOverlay(); return;
-        }
-
-        hideOverlay();
-    }
-
-    try {
-        if (DOM.mindmapContainer)
-            DOM.mindmapContainer.innerHTML = `<div class="mermaid w-full h-full flex justify-center">${doc.mindmapCode}</div>`;
-
-        await mermaid.run();
-        const svg = DOM.mindmapContainer ? DOM.mindmapContainer.querySelector('svg') : null;
-
-        if (svg) {
-            let scale = 1;
-            DOM.mindmapContainer.addEventListener('wheel', (e) => {
-                e.preventDefault();
-
-                scale = scale + e.deltaY * -0.001;
-                scale = Math.min(Math.max(0.4, scale), 5);
-
-                svg.style.transform = `scale(${scale})`;
-                svg.style.transition = 'transform 0.1s';
-            });
-        }
-    }
-
-    catch (e) {
-        if (DOM.mindmapContainer)
-            DOM.mindmapContainer.innerHTML = `<div class="text-red-500 p-4"><h3>Mind Map Render Failed</h3><pre class="text-xs mt-2">${doc.mindmapCode}</pre></div>`;
-    }
-}
-
-/** FEATURE: PPT DECK **/
-if (DOM.btnRegenPpt)
-    DOM.btnRegenPpt.addEventListener('click', () => renderPpt(true));
-
-async function renderPpt(forceRegenerate = false) {
-    const doc = AppState.documents.find(d => d.id === AppState.activeDocId);
-
-    if (!doc)
-        return showToast("Select a document first.", "error");
-
-    if (forceRegenerate || !doc.pptData) {
-        showOverlay("Distilling key findings...\nGenerating Presentation Deck...");
-        try {
-            const data = await callBackend('generate-ppt', { doc_id: doc.id });
-            doc.pptData = data.slides;
-        }
-
-        catch (e) {
-            showToast(e.message, "error");
-            hideOverlay(); return;
-        }
-
-        hideOverlay();
-    }
-
-    AppState.pptSlides = doc.pptData;
-    AppState.currentPptSlide = 0;
-
-    updatePptView();
-}
-
-function updatePptView() {
-    if (!AppState.pptSlides || AppState.pptSlides.length === 0)
-        return;
-
-    if (DOM.pptControls)
-        DOM.pptControls.classList.remove('hidden');
-
-    if (DOM.btnDownloadPpt) {
-        DOM.btnDownloadPpt.classList.remove('hidden');
-        DOM.btnDownloadPpt.classList.add('flex');
-    }
-
-    if (DOM.pptTotalNum)
-        DOM.pptTotalNum.textContent = AppState.pptSlides.length;
-
-    if (DOM.pptCurrentNum)
-        DOM.pptCurrentNum.textContent = AppState.currentPptSlide + 1;
-
-    if (DOM.pptSlidesContainer) {
-        DOM.pptSlidesContainer.innerHTML = AppState.pptSlides.map((slide, index) => {
-            const isActive = index === AppState.currentPptSlide;
-            return `
-            <div class="slide-fade ${isActive ? 'slide-active' : 'slide-hidden'} w-full max-w-2xl bg-white dark:bg-gray-800 p-8 md:p-12 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700">
-                <div class="text-io-accent text-5xl mb-6 flex justify-center"><i class="ph-fill ${slide.icon || 'ph-flask'}"></i></div>
-                <h2 class="text-3xl font-bold mb-8 text-gray-900 dark:text-white leading-tight">${slide.title}</h2>
-                <ul class="text-left space-y-4">
-                ${slide.bullets.map(b => `<li class="flex items-start gap-3 text-lg text-gray-700 dark:text-gray-300"><i class="ph-fill ph-check-circle text-io-accent mt-1.5 shrink-0"></i><span class="leading-relaxed">${b}</span></li>`).join('')}
-                </ul>
+<body
+    class="bg-gray-50 dark:bg-io-900 text-gray-900 dark:text-gray-100 h-screen w-screen overflow-hidden transition-colors relative">
+    <!-- VIEW 1: LANDING PAGE -->
+    <div id="landing-view"
+        class="absolute inset-0 flex flex-col z-20 overflow-y-auto bg-gray-50 dark:bg-io-900 transition-opacity duration-500">
+        <div class="fixed top-0 left-0 w-full h-full overflow-hidden -z-10 pointer-events-none">
+            <div
+                class="absolute top-[-10%] left-[-10%] w-96 h-96 bg-teal-400/30 rounded-full mix-blend-multiply blur-3xl opacity-70 animate-blob">
             </div>
-            `;
-        }).join('');
-    }
-}
+            <div
+                class="absolute top-[20%] right-[-10%] w-96 h-96 bg-blue-400/30 rounded-full mix-blend-multiply blur-3xl opacity-70 animate-blob animation-delay-2000">
+            </div>
+        </div>
 
-if (DOM.pptPrev)
-    DOM.pptPrev.addEventListener('click', () => { if (AppState.currentPptSlide > 0) { AppState.currentPptSlide--; updatePptView(); } });
+        <nav class="w-full max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
+            <div class="flex items-center gap-2 text-2xl font-bold">
+                <div
+                    class="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-400 to-io-accent flex items-center justify-center text-white">
+                    <i class="ph-fill ph-stethoscope"></i></div>
+                <span>MedAgent<span class="text-io-accent">-X</span></span>
+            </div>
 
-if (DOM.pptNext)
-    DOM.pptNext.addEventListener('click', () => { if (AppState.currentPptSlide < AppState.pptSlides.length - 1) { AppState.currentPptSlide++; updatePptView(); } });
+            <div class="flex items-center gap-6 font-medium text-sm">
+                <a href="#" class="hover:text-io-accent transition-colors hidden sm:block">Features</a>
+                <a href="#" class="hover:text-io-accent transition-colors hidden sm:block">Architecture</a>
 
-// TRIGGER PPTX DOWNLOAD
-if (DOM.btnDownloadPpt) {
-    DOM.btnDownloadPpt.addEventListener('click', async () => {
-        const doc = AppState.documents.find(d => d.id === AppState.activeDocId);
+                <div
+                    class="flex items-center gap-2 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700">
+                    <div id="landing-status-indicator"
+                        class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]"></div>
+                    <span id="landing-status-text" class="text-xs uppercase tracking-wider text-gray-500">Backend
+                        Offline</span>
+                </div>
 
-        if (!doc)
-            return showToast("Select a document first.", "error");
+                <button id="btn-theme-landing" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"><i
+                        class="ph ph-sun text-xl"></i></button>
+            </div>
+        </nav>
 
-        showToast("Generating PowerPoint file...", "info");
+        <main class="flex-1 flex flex-col items-center justify-center text-center px-4 mt-10 mb-20 animate-slide-up">
+            <div
+                class="inline-block px-4 py-1.5 rounded-full border border-teal-200 dark:border-teal-800 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 text-sm font-semibold mb-6">
+                ✨ Enterprise RAG Architecture
+            </div>
 
-        try {
-            const res = await fetch(`${AppState.backendUrl}/api/export-ppt`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ doc_id: doc.id })
-            });
+            <h1 class="text-5xl md:text-7xl font-extrabold tracking-tight mb-6 max-w-4xl leading-tight">
+                Decode Medical Research <br class="hidden md:block" />
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-teal-500 to-blue-500">in
+                    Seconds.</span>
+            </h1>
 
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({ detail: "Export failed" }));
-                throw new Error(err.detail || "Failed to generate PPTX");
-            }
+            <p class="text-lg md:text-xl text-gray-600 dark:text-gray-400 max-w-2xl mb-12">
+                Upload dense clinical trials. Our Agentic AI builds interactive knowledge graphs and generates
+                downloadable presentation decks instantly.
+            </p>
 
-            const blob = await res.blob();
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
+            <div class="w-full max-w-2xl">
+                <label for="hero-file-upload"
+                    class="group relative flex flex-col items-center justify-center w-full h-64 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-3xl bg-white/40 dark:bg-gray-800/40 backdrop-blur-md hover:border-io-accent cursor-pointer shadow-xl">
+                    <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                        <div
+                            class="w-20 h-20 mb-4 rounded-full bg-teal-50 dark:bg-teal-900/50 flex items-center justify-center text-io-accent group-hover:scale-110 transition-transform">
+                            <i class="ph ph-upload-simple text-4xl"></i>
+                        </div>
 
-            a.href = url;
-            a.download = `${doc.name.replace('.pdf', '')}_Presentation.pptx`;
-            document.body.appendChild(a);
-            a.click();
-            a.remove();
+                        <p class="mb-2 text-xl font-semibold">Click to upload or drag and drop</p>
+                        <p class="text-sm text-gray-500">Medical PDFs only (Select multiple!)</p>
+                    </div>
 
-            window.URL.revokeObjectURL(url);
+                    <input id="hero-file-upload" type="file" class="hidden" accept="application/pdf" multiple />
+                </label>
+            </div>
 
-            showToast("Download complete!", "success");
-        }
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mt-20">
+                <div class="flex flex-col items-center p-6 rounded-2xl glass-panel">
+                    <i class="ph-fill ph-shield-check text-4xl text-teal-500 mb-4"></i>
+                    <h3 class="font-bold">Medical Verification</h3>
+                </div>
 
-        catch (e) {
-            showToast(e.message, "error");
-        }
-    });
-}
+                <div class="flex flex-col items-center p-6 rounded-2xl glass-panel">
+                    <i class="ph-fill ph-tree-structure text-4xl text-blue-500 mb-4"></i>
+                    <h3 class="font-bold">Knowledge Graphs</h3>
+                </div>
 
-/** CHATBOT LOGIC **/
-if (DOM.chatForm) {
-    DOM.chatForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const query = DOM.chatInput.value.trim();
+                <div class="flex flex-col items-center p-6 rounded-2xl glass-panel">
+                    <i class="ph-fill ph-presentation-chart text-4xl text-purple-500 mb-4"></i>
+                    <h3 class="font-bold">PPTX Exports</h3>
+                </div>
+            </div>
+        </main>
+    </div>
 
-        if (!query)
-            return;
+    <!-- VIEW 2: APP WORKSPACE -->
+    <div id="app-workspace" class="hidden flex-col h-full w-full z-30 bg-white dark:bg-io-900">
+        <header
+            class="h-14 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4 bg-gray-50 dark:bg-gray-900">
 
-        const doc = AppState.documents.find(d => d.id === AppState.activeDocId);
+            <div class="flex items-center gap-4">
+                <button id="btn-home" class="text-gray-500 hover:text-io-accent">
+                    <i class="ph-bold ph-arrow-left text-xl"></i>
+                </button>
 
-        if (!doc)
-            return showToast("Upload a medical document first.", "error");
+                <div class="flex items-center gap-2 text-io-accent font-bold">
+                    <div
+                        class="w-8 h-8 rounded-lg bg-gradient-to-br from-teal-400 to-io-accent flex items-center justify-center text-white">
+                        <i class="ph-fill ph-stethoscope"></i>
+                    </div>
 
-        appendMessage('user', query);
-        DOM.chatInput.value = '';
-        const typingIndicatorId = appendTypingIndicator();
+                    <span>MedAgent
+                        <span class="text-xs font-normal text-gray-500 ml-1">Workspace</span>
+                    </span>
+                </div>
+            </div>
 
-        try {
-            const data = await callBackend('chat', { query: query, doc_id: doc.id });
-            removeMessage(typingIndicatorId); appendMessage('bot', data.reply);
-        }
+            <div class="flex items-center gap-4">
+                <div
+                    class="flex items-center gap-2 bg-white dark:bg-gray-800 px-3 py-1 rounded-full border border-gray-200 dark:border-gray-700">
+                    <div id="api-status-indicator" class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_8px_#ef4444]">
+                    </div>
+                    <span id="api-status-text" class="text-xs font-medium uppercase">Connecting...</span>
+                </div>
 
-        catch (error) {
-            removeMessage(typingIndicatorId); appendMessage('bot', `**Connection Error:** ${error.message}`);
-        }
-    });
-}
+                <button id="btn-theme-app" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800">
+                    <i class="ph ph-sun text-xl"></i>
+                </button>
+            </div>
+        </header>
 
-function appendMessage(sender, text) {
-    if (!DOM.chatHistory)
-        return;
+        <main class="flex flex-1 overflow-hidden">
+            <aside class="w-64 border-r border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 flex flex-col">
+                <div class="p-4 border-b border-gray-200 dark:border-gray-800">
+                    <label for="sidebar-file-upload"
+                        class="cursor-pointer flex items-center justify-center gap-2 bg-io-accent hover:bg-teal-700 text-white py-2.5 px-4 rounded-lg text-sm font-medium w-full shadow-md"><i
+                            class="ph-bold ph-plus"></i> New Document</label>
+                    <input type="file" id="sidebar-file-upload" accept="application/pdf" class="hidden" multiple>
+                </div>
 
-    const div = document.createElement('div');
-    div.className = 'flex gap-3';
+                <div class="p-4 pb-2">
+                    <h2 class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Active Sources</h2>
+                </div>
 
-    if (sender === 'user') {
-        div.innerHTML = `<div class="flex-1 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-3.5 rounded-2xl rounded-tr-sm shadow-sm border border-gray-200 dark:border-gray-700 ml-8 text-sm">${marked.parse(text)}</div>
-        <div class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center shrink-0 text-gray-600 dark:text-gray-300"><i class="ph-fill ph-user"></i></div>`;
-    }
+                <div id="file-list" class="flex-1 overflow-y-auto px-3 pb-3 space-y-1.5"></div>
+            </aside>
 
-    else {
-        div.innerHTML = `<div class="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center shrink-0 text-io-accent border border-teal-200 dark:border-teal-800"><i class="ph-fill ph-robot text-lg"></i></div>
-        <div class="flex-1 bg-white dark:bg-gray-800 p-3.5 rounded-2xl rounded-tl-sm shadow-sm border border-gray-100 dark:border-gray-700 text-gray-800 dark:text-gray-200 prose dark:prose-invert prose-sm max-w-none leading-relaxed">${marked.parse(text)}</div>`;
-    }
+            <section class="flex-1 flex flex-col relative">
+                <div
+                    class="flex items-center justify-center gap-2 border-b border-gray-200 dark:border-gray-800 pt-2 px-4 bg-gray-50 dark:bg-gray-900">
+                    <button
+                        class="tab-btn active text-io-accent border-b-2 border-io-accent px-4 py-2.5 font-medium flex gap-2"
+                        data-target="view-paper">
+                        <i class="ph ph-file-text text-lg"></i>
+                        Paper
+                    </button>
 
-    DOM.chatHistory.appendChild(div);
-    DOM.chatHistory.scrollTop = DOM.chatHistory.scrollHeight;
-}
+                    <button
+                        class="tab-btn text-gray-500 border-b-2 border-transparent px-4 py-2.5 font-medium flex gap-2"
+                        data-target="view-graph">
+                        <i class="ph ph-graph text-lg"></i>
+                        Graph
+                    </button>
 
-function appendTypingIndicator() {
-    if (!DOM.chatHistory)
-        return null;
+                    <button
+                        class="tab-btn text-gray-500 border-b-2 border-transparent px-4 py-2.5 font-medium flex gap-2"
+                        data-target="view-ppt">
+                        <i class="ph ph-presentation-chart text-lg"></i>
+                        Pitch Deck
+                    </button>
+                </div>
 
-    const id = 'typing-' + Date.now();
-    const div = document.createElement('div');
+                <div class="flex-1 overflow-auto p-4 bg-gray-50/50 dark:bg-gray-900/50 relative">
+                    <div id="view-paper" class="tab-content w-full h-full flex flex-col items-center">
+                        <div id="pdf-controls"
+                            class="hidden flex items-center gap-2 mb-4 bg-white dark:bg-gray-800 px-3 py-1.5 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 text-sm">
+                            <button id="pdf-prev" class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md">
+                                <i class="ph-bold ph-caret-left"></i>
+                            </button>
 
-    div.id = id;
-    div.className = 'flex gap-3 items-center text-gray-400 text-xs font-medium uppercase tracking-wider';
-    div.innerHTML = `<div class="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center shrink-0 text-io-accent border border-teal-200 dark:border-teal-800 opacity-50"><i class="ph-fill ph-robot text-lg"></i></div>Semantic Search in progress...`;
+                            <div class="flex items-center font-medium px-2">
+                                <input type="number" id="pdf-page-num" value="0" min="1"
+                                    class="w-10 text-center bg-gray-100 dark:bg-gray-900 border border-transparent rounded">
+                                <span class="ml-1">/ <span id="pdf-page-count">0</span></span>
+                            </div>
 
-    DOM.chatHistory.appendChild(div);
-    DOM.chatHistory.scrollTop = DOM.chatHistory.scrollHeight;
+                            <button id="pdf-next" class="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md">
+                                <i class="ph-bold ph-caret-right"></i>
+                            </button>
+                        </div>
 
-    return id;
-}
+                        <canvas id="pdf-canvas" class="shadow-lg rounded-lg hidden max-w-full bg-white"></canvas>
 
-function removeMessage(id) {
-    const el = document.getElementById(id);
+                    </div>
 
-    if (el)
-        el.remove();
-}
+                    <div id="view-graph" class="tab-content w-full h-full hidden flex-col">
+                        <div class="flex justify-end gap-2 mb-3">
+                            <button id="btn-regen-graph"
+                                class="px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md font-medium">
+                                <i class="ph-bold ph-arrows-clockwise text-io-accent"></i>
+                                Generate
+                            </button>
 
-if (DOM.chatInput) {
-    DOM.chatInput.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            DOM.chatForm.dispatchEvent(new Event('submit'));
-        }
-    });
-}
+                            <button
+                                class="btn-fullscreen px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md font-medium"
+                                data-target="view-graph">
+                                Fullscreen
+                            </button>
+                        </div>
+
+                        <div id="mindmap-container"
+                            class="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl flex items-center justify-center bg-white dark:bg-gray-800 shadow-inner overflow-auto">
+                            <div class="text-gray-500 text-sm text-center">Click generate to map document.</div>
+                        </div>
+                    </div>
+
+                    <div id="view-ppt" class="tab-content w-full h-full hidden flex-col">
+                        <div class="flex justify-end gap-2 mb-3">
+                            <button id="btn-regen-ppt"
+                                class="px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md font-medium">
+                                <i class="ph-bold ph-magic-wand text-io-accent"></i>
+                                Build Deck
+                            </button>
+
+                            <button id="btn-download-ppt"
+                                class="hidden px-3 py-1.5 text-sm bg-io-accent text-white rounded-md font-medium">
+                                <i class="ph-bold ph-download-simple"></i>
+                                Download .pptx
+                            </button>
+
+                            <button
+                                class="btn-fullscreen px-3 py-1.5 text-sm bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md font-medium"
+                                data-target="view-ppt">
+                                Fullscreen
+                            </button>
+                        </div>
+
+                        <div id="ppt-container"
+                            class="flex-1 border border-gray-200 dark:border-gray-700 rounded-xl flex flex-col bg-gray-100 dark:bg-gray-900 overflow-hidden relative shadow-inner">
+                            <div id="ppt-slides" class="w-full h-full flex items-center justify-center p-8">
+                                <div class="text-gray-500 text-sm">Synthesize paper into a pitch.</div>
+                            </div>
+
+                            <div id="ppt-controls"
+                                class="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex items-center gap-4 bg-white/90 dark:bg-gray-800/90 backdrop-blur-md px-4 py-2 rounded-full shadow-lg hidden">
+                                <button id="ppt-prev" class="hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded-full">
+                                    <i class="ph-bold ph-caret-left"></i>
+                                </button>
+
+                                <span class="text-sm font-medium">Slide
+                                    <span id="ppt-current-num">0</span> /
+                                    <span id="ppt-total-num">0</span>
+                                </span>
+
+                                <button id="ppt-next" class="hover:bg-gray-100 dark:hover:bg-gray-700 p-1 rounded-full">
+                                    <i class="ph-bold ph-caret-right"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <aside
+                class="w-80 border-l border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 flex flex-col shadow-[-4px_0_24px_rgba(0,0,0,0.05)]">
+                <div
+                    class="p-4 border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/50 flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                    <h2 class="text-sm font-bold tracking-wide">Hybrid AI Agent</h2>
+                </div>
+
+                <div id="chat-history"
+                    class="flex-1 overflow-y-auto p-4 space-y-4 text-sm bg-gray-50/30 dark:bg-gray-900/30"></div>
+
+                <div class="p-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900">
+                    <form id="chat-form" class="relative">
+                        <textarea id="chat-input" rows="1" placeholder="Ask anything (medical or general)..."
+                            class="w-full bg-gray-100 dark:bg-gray-800 border-none rounded-xl py-3 pl-4 pr-12 text-sm resize-none outline-none focus:ring-1 focus:ring-io-accent block"
+                            style="min-height: 44px;"></textarea>
+
+                        <button type="submit"
+                            class="absolute bottom-2 right-2 p-1.5 bg-io-accent text-white rounded-lg">
+                            <i class="ph-bold ph-arrow-up"></i>
+                        </button>
+                    </form>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <!-- Overlays -->
+    <div id="loading-overlay"
+        class="fixed inset-0 bg-white/80 dark:bg-gray-900/80 z-[100] hidden flex-col items-center justify-center backdrop-blur-sm">
+        <div class="spinner mb-5 w-12 h-12 border-4"></div>
+        <div id="loading-text" class="text-lg font-semibold tracking-tight text-center">Processing Document...</div>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-6 right-6 z-[110] flex flex-col gap-3 pointer-events-none"></div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
