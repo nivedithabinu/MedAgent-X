@@ -1,303 +1,691 @@
-import os
-import json
-import io
-import time
-import uuid
-import numpy as np
-import requests
+/** APPLICATION STATE **/
+const AppState = {
+    backendUrl: 'https://medagent-x.onrender.com',
+    documents: [],
+    activeDocId: null,
+    pdfDoc: null,
+    pageNum: 1,
+    pptSlides: [],
+    currentPptSlide: 0,
+};
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from dotenv import load_dotenv
-from pypdf import PdfReader
-from fastapi.responses import StreamingResponse
-from pptx import Presentation
+// DOM Elements
+const DOM = {
+    landingView: document.getElementById('landing-view'),
+    appWorkspace: document.getElementById('app-workspace'),
 
-load_dotenv(override=True)
+    apiStatusIndicators: [document.getElementById('api-status-indicator'), document.getElementById('landing-status-indicator')],
+    apiStatusTexts: [document.getElementById('api-status-text'), document.getElementById('landing-status-text')],
 
-app = FastAPI(title="MedAgent-X API")
+    btnThemeLanding: document.getElementById('btn-theme-landing'),
+    btnThemeApp: document.getElementById('btn-theme-app'),
+    btnHome: document.getElementById('btn-home'),
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    heroFileUpload: document.getElementById('hero-file-upload'),
+    sidebarFileUpload: document.getElementById('sidebar-file-upload'),
+    fileList: document.getElementById('file-list'),
 
-class QueryRequest(BaseModel):
-    query: str
-    doc_id: str
+    tabBtns: document.querySelectorAll('.tab-btn'),
+    tabContents: document.querySelectorAll('.tab-content'),
 
-class DocRequest(BaseModel):
-    doc_id: str
+    pdfCanvas: document.getElementById('pdf-canvas'),
+    pdfControls: document.getElementById('pdf-controls'),
+    pdfPrev: document.getElementById('pdf-prev'),
+    pdfNext: document.getElementById('pdf-next'),
+    pdfPageNum: document.getElementById('pdf-page-num'),
+    pdfPageCount: document.getElementById('pdf-page-count'),
 
-vector_db = {}
+    mindmapContainer: document.getElementById('mindmap-container'),
+    btnRegenGraph: document.getElementById('btn-regen-graph'),
 
-api_key = os.getenv("GEMINI_API_KEY", "")
-api_key = api_key.replace('"', '').replace("'", "").replace("Bearer ", "").strip()
+    pptContainer: document.getElementById('ppt-container'),
+    pptSlidesContainer: document.getElementById('ppt-slides'),
+    pptControls: document.getElementById('ppt-controls'),
+    pptPrev: document.getElementById('ppt-prev'),
+    pptNext: document.getElementById('ppt-next'),
+    pptCurrentNum: document.getElementById('ppt-current-num'),
+    pptTotalNum: document.getElementById('ppt-total-num'),
 
-class AIResponse:
-    def __init__(self, text):
-        self.text = text
+    btnRegenPpt: document.getElementById('btn-regen-ppt'),
+    btnDownloadPpt: document.getElementById('btn-download-ppt'),
 
-def generate_with_retry(prompt: str, instruction: str, response_mime_type: str = "text/plain"):
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY is missing. Please set it in Render Dashboard.")
-    
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+    chatHistory: document.getElementById('chat-history'),
+    chatForm: document.getElementById('chat-form'),
+    chatInput: document.getElementById('chat-input'),
 
-    headers = {
-        "x-goog-api-key": api_key, 
-        "Content-Type": "application/json"
+    loadingOverlay: document.getElementById('loading-overlay'),
+    loadingText: document.getElementById('loading-text'),
+
+    toastContainer: document.getElementById('toast-container')
+};
+
+/** TOAST NOTIFICATION SYSTEM **/
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+
+    let bgClass = 'bg-gray-800 dark:bg-gray-700';
+    let icon = '<i class="ph-fill ph-info text-blue-400"></i>';
+
+    if (type === 'error') {
+        bgClass = 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800';
+        icon = '<i class="ph-fill ph-warning-circle text-red-500"></i>';
     }
 
-    payload = {
-        "systemInstruction": {"parts": [{"text": instruction}]},
-
-        "contents": [{"parts": [{"text": prompt}]}],
-
-        "safetySettings": [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
-        ],
-
-        "generationConfig": {
-            "temperature": 0.2,
-            "responseMimeType": response_mime_type
-        }
-    }
-    
-    for attempt in range(2):
-        try:
-            res = requests.post(url, json=payload, headers=headers)
-            
-            if res.status_code == 429:
-                if attempt == 0:
-                    print("⚠️ Quota Hit! Pausing for 15s...")
-                    time.sleep(15)
-                    continue
-            
-            res.raise_for_status()
-            data = res.json()
-            
-            # Extract text safely
-            text_content = data["candidates"][0]["content"]["parts"][0]["text"]
-            return AIResponse(text_content)
-            
-        except Exception as e:
-            error_msg = res.text if 'res' in locals() and hasattr(res, 'text') else str(e)
-    
-            if attempt == 1:
-                raise Exception(f"Gemini API Error: {error_msg}")
-
-def get_embeddings(texts: list):
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY is missing.")
-    
-    url = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents"
-    
-    headers = {
-        "x-goog-api-key": api_key,
-        "Content-Type": "application/json"
+    else if (type === 'success') {
+        bgClass = 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800';
+        icon = '<i class="ph-fill ph-check-circle text-green-500"></i>';
     }
 
-    requests_list = [
-        {
-            "model": "models/text-embedding-004",
-            "content": {"parts": [{"text": t}]}
-        } 
-        
-        for t in texts
-    ]
-    
-    res = requests.post(url, json={"requests": requests_list}, headers=headers)
+    toast.className = `flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg ${bgClass} text-sm font-medium text-gray-800 dark:text-gray-100 transform translate-y-10 opacity-0 transition-all duration-300 pointer-events-auto max-w-sm`;
+    toast.innerHTML = `${icon} <span>${message}</span>`;
 
-    if not res.ok:
-        raise Exception(f"Embedding API Error: {res.text}")
-        
-    data = res.json()
-    return [np.array(emb["values"]) for emb in data.get("embeddings", [])]
+    if (DOM.toastContainer)
+        DOM.toastContainer.appendChild(toast);
 
-@app.get("/")
-def read_root():
-    return {
-        "status": "MedAgent-X Enterprise Backend Online"
+    setTimeout(() => toast.classList.remove('translate-y-10', 'opacity-0'), 10);
+    setTimeout(() => {
+        toast.classList.add('translate-y-10', 'opacity-0');
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
+}
+
+/** INITIALIZATION & THEME **/
+try {
+    mermaid.initialize({
+        startOnLoad: false,
+        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default'
+    });
+}
+
+catch (e) {
+
+}
+
+function toggleTheme() {
+    document.documentElement.classList.toggle('dark');
+
+    try {
+        mermaid.initialize({
+            theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default'
+        });
     }
 
-@app.post("/api/upload")
-async def upload_pdf(file: UploadFile = File(...)):
-    if not file.filename.endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Must be a PDF file.")
-        
-    try:
-        content = await file.read()
-        pdf = PdfReader(io.BytesIO(content))
-        
-        full_text = ""
+    catch (e) {
 
-        for i, page in enumerate(pdf.pages): 
-            text = page.extract_text()
-            if text:
-                full_text = full_text + f"\n--- [PAGE {i+1}] ---\n{text.strip()}\n"
-                
-        if not full_text:
-            raise HTTPException(status_code=400, detail="Could not extract text from PDF.")
+    }
 
-        first_page = full_text[:1000]
-        prompt = f"Analyze this text snippet: \"{first_page}\". Is this highly likely related to Medical, Health, or Biological sciences? Reply with exactly YES or NO."
-        response = generate_with_retry(prompt, "You are a strict medical classifier.")
-        
-        if "YES" not in response.text.strip().upper():
-            raise HTTPException(status_code=403, detail="Document rejected: Content is not medical research.")
+    if (AppState.activeDocId)
+        renderMindMap(false);
+}
 
-        chunk_size = 1500
-        chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)][:60]
+if (DOM.btnThemeLanding)
+    DOM.btnThemeLanding.addEventListener('click', toggleTheme);
 
-        embeddings = get_embeddings(chunks)
+if (DOM.btnThemeApp)
+    DOM.btnThemeApp.addEventListener('click', toggleTheme);
 
-        doc_id = str(uuid.uuid4())
+if (DOM.btnHome) {
+    DOM.btnHome.addEventListener('click', () => {
+        DOM.appWorkspace.classList.add('hidden');
+        DOM.landingView.classList.remove('hidden');
+        DOM.landingView.classList.add('flex');
+    });
+}
 
-        vector_db[doc_id] = {
-            "chunks": chunks,
-            "embeddings": embeddings,
-            "full_text": full_text[:25000],
-            "ppt": None,
-            "graph": None
+function openWorkspace() {
+    DOM.landingView.classList.remove('flex');
+    DOM.landingView.classList.add('hidden');
+    DOM.appWorkspace.classList.remove('hidden');
+    DOM.appWorkspace.classList.add('flex');
+}
+
+document.querySelectorAll('.btn-fullscreen').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+        const targetId = e.target.closest('button').dataset.target;
+        const container = document.getElementById(targetId);
+
+        if (container)
+            container.classList.toggle('fullscreen-mode');
+
+        const icon = e.target.closest('button').querySelector('i');
+
+        if (icon) {
+            icon.classList.toggle('ph-corners-out');
+            icon.classList.toggle('ph-corners-in');
+        }
+    });
+});
+
+DOM.tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        DOM.tabBtns.forEach(b => {
+            b.classList.remove('active', 'border-b-2', 'border-io-accent', 'text-io-accent');
+            b.classList.add('text-gray-500', 'border-transparent');
+        });
+
+        btn.classList.add('active', 'border-b-2', 'border-io-accent', 'text-io-accent');
+        btn.classList.remove('text-gray-500', 'border-transparent');
+
+        const targetId = btn.dataset.target;
+
+        DOM.tabContents.forEach(content => {
+            content.classList.toggle('hidden', content.id !== targetId);
+            content.classList.toggle('flex', content.id === targetId);
+        });
+
+        if (targetId === 'view-graph' && AppState.activeDocId)
+            renderMindMap(false);
+    });
+});
+
+function showOverlay(text) {
+    if (DOM.loadingText)
+        DOM.loadingText.innerText = text;
+
+    if (DOM.loadingOverlay) {
+        DOM.loadingOverlay.classList.remove('hidden');
+        DOM.loadingOverlay.classList.add('flex');
+    }
+}
+function hideOverlay() {
+    if (DOM.loadingOverlay) {
+        DOM.loadingOverlay.classList.add('hidden');
+        DOM.loadingOverlay.classList.remove('flex');
+    }
+}
+
+async function checkBackendConnection() {
+    try {
+        const res = await fetch(`${AppState.backendUrl}/`);
+
+        if (res.ok) {
+            DOM.apiStatusIndicators.forEach(el => {
+                if (el) {
+                    el.classList.replace('bg-red-500', 'bg-green-500');
+                    el.classList.replace('shadow-[0_0_8px_#ef4444]', 'shadow-[0_0_8px_#22c55e]');
+                }
+            });
+
+            DOM.apiStatusTexts.forEach(el => {
+                if (el)
+                    el.textContent = "Backend Online";
+            });
+        }
+    }
+
+    catch (e) {
+        DOM.apiStatusIndicators.forEach(el => {
+            if (el) {
+                el.classList.replace('bg-green-500', 'bg-red-500');
+                el.classList.replace('shadow-[0_0_8px_#22c55e]', 'shadow-[0_0_8px_#ef4444]');
+            }
+        });
+
+        DOM.apiStatusTexts.forEach(el => {
+            if (el)
+                el.textContent = "Backend Offline";
+        });
+    }
+}
+
+setTimeout(checkBackendConnection, 500);
+
+/** DOCUMENT UPLOAD & PARSING **/
+async function handleFileUpload(files) {
+    if (!files || files.length === 0)
+        return;
+
+    for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+
+        if (file.type !== "application/pdf") {
+            showToast(`Skipped ${file.name}: Not a PDF.`, "error");
+            continue;
         }
 
-        return {
-            "doc_id": doc_id, 
-            "filename": file.filename, 
-            "pages_count": len(pdf.pages)
-        }
+        showOverlay(`Processing ${file.name}...\nChunking & Embedding Document...`);
 
-    except Exception as e:
-        print(f"Upload Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        const formData = new FormData();
+        formData.append('file', file);
 
-@app.post("/api/chat")
-async def chat_with_agent(req: QueryRequest):
-    if req.doc_id not in vector_db:
-        raise HTTPException(status_code=404, detail="Session expired. Please re-upload the document.")
-    
-    doc_data = vector_db[req.doc_id]
-    
-    try:
-        query_emb = get_embeddings([req.query])[0]
-        
-        similarities = [np.dot(query_emb, doc_emb) / (np.linalg.norm(query_emb) * np.linalg.norm(doc_emb)) for doc_emb in doc_data["embeddings"]]
-        top_indices = np.argsort(similarities)[-4:][::-1]
-        relevant_context = "\n\n...\n\n".join([doc_data["chunks"][i] for i in top_indices])
-        
-        prompt = f"User Query: {req.query}\n\nRelevant Document Context:\n{relevant_context}"
+        try {
+            const res = await fetch(`${AppState.backendUrl}/api/upload`, {
+                method: 'POST',
+                body: formData
+            });
 
-        instruction = """You are MedAgent-X, an advanced Clinical AI and versatile assistant.
-        1. If the query relates to the provided Document Context, answer using the context and explicitly cite the [PAGE X] markers.
-        2. If the query is a general question (e.g., coding, math, casual conversation), ignore the document context and answer using your broad general knowledge.
-        3. Always be professional, clear, and highly helpful."""
-        
-        response = generate_with_retry(prompt, instruction)
-
-        return {
-            "reply": response.text
-        }
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/generate-graph")
-async def generate_graph(req: DocRequest):
-    try:
-        if req.doc_id not in vector_db:
-            raise HTTPException(status_code=404, detail="Document not found.")
-        
-        if vector_db[req.doc_id]["graph"]:
-            return {"mermaid_code": vector_db[req.doc_id]["graph"]}
-
-        prompt = f"Analyze this medical text and create a Mermaid.js mindmap showing core disease, symptoms, treatments. Start with 'mindmap' on line 1. Keep nodes short. Text: {vector_db[req.doc_id]['full_text'][:15000]}"
-        response = generate_with_retry(prompt, "Output ONLY valid mermaid mindmap code. No markdown blocks.")
-        
-        mermaid_code = response.text.replace("```mermaid", "").replace("```", "").strip()
-        vector_db[req.doc_id]["graph"] = mermaid_code
-
-        return {
-            "mermaid_code": mermaid_code
-        }
-
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Graph Generation Failed")
-
-@app.post("/api/generate-ppt")
-async def generate_ppt(req: DocRequest):
-    try:
-        if req.doc_id not in vector_db:
-            raise HTTPException(status_code=404, detail="Document not found.")
-
-        if vector_db[req.doc_id]["ppt"]:
-            return {
-                "slides": vector_db[req.doc_id]["ppt"]
+            if (!res.ok) {
+                const errorText = await res.json().catch(() => ({ detail: "Server connection failed." }));
+                throw new Error(errorText.detail || "Upload failed");
             }
 
-        prompt = f"Create a 5 slide presentation summarizing core findings. Schema: [{{ 'title': 'Title', 'bullets': ['pt1', 'pt2'], 'icon': 'ph-pill' }}]. Text: {vector_db[req.doc_id]['full_text'][:15000]}"
-        response = generate_with_retry(prompt, "Output strictly a JSON array.", "application/json")
-        
-        clean_text = response.text.replace("```json", "").replace("```", "").strip()
-        slides = json.loads(clean_text)
-        vector_db[req.doc_id]["ppt"] = slides
+            const data = await res.json();
+            const arrayBuffer = await file.arrayBuffer();
 
-        return {
-            "slides": slides
+            AppState.documents.push({
+                id: data.doc_id,
+                name: file.name,
+                arrayBuffer: arrayBuffer,
+                pagesCount: data.pages_count,
+                mindmapCode: null,
+                pptData: null
+            });
+
+            showToast(`${file.name} Vectorized successfully!`, "success");
         }
 
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail="PPT Generation Failed")
+        catch (err) {
+            showToast(`Failed ${file.name}: ${err.message}`, "error");
+        }
+    }
 
-@app.post("/api/export-ppt")
-async def export_ppt(req: DocRequest):
-    try:
-        if req.doc_id not in vector_db or not vector_db[req.doc_id].get("ppt"):
-            raise HTTPException(status_code=404, detail="Please generate the PPT in the UI first.")
-            
-            slides_data = vector_db[req.doc_id]["ppt"]
-            prs = Presentation()
+    updateSidebarList();
+    hideOverlay();
 
-        for slide_data in slides_data:
-            slide = prs.slides.add_slide(prs.slide_layouts[1]) 
-            title_shape = slide.shapes.title
-            
-            if title_shape:
-                title_shape.text = slide_data.get("title", "Slide")
-                
-                body_shape = slide.shapes.placeholders[1]
-                t = body_shape.text_frame
-                bullets = slide_data.get("bullets", [])
-                
-                if bullets:
-                    t.text = bullets[0]
-                    
-                    for bullet in bullets[1:]:
-                        p = t.add_paragraph()
-                        p.text = bullet
-                        p.level = 0
-                        
-        ppt_stream = io.BytesIO()
-        prs.save(ppt_stream)
-        ppt_stream.seek(0)
+    if (DOM.landingView && !DOM.landingView.classList.contains('hidden'))
+        openWorkspace();
 
-        return StreamingResponse(
-            ppt_stream,
-            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            headers={
-                "Content-Disposition": f"attachment; filename=MedAgent_Export.pptx"
+    // Auto-select the most recently uploaded document
+    if (AppState.documents.length > 0) {
+        selectDocument(AppState.documents[AppState.documents.length - 1].id);
+    }
+}
+
+if (DOM.heroFileUpload)
+    DOM.heroFileUpload.addEventListener('change', (e) => {
+        handleFileUpload(e.target.files);
+        e.target.value = '';
+    });
+
+if (DOM.sidebarFileUpload)
+    DOM.sidebarFileUpload.addEventListener('change', (e) => {
+        handleFileUpload(e.target.files);
+        e.target.value = '';
+    });
+
+const fallbackUpload = document.getElementById('file-upload');
+if (fallbackUpload)
+    fallbackUpload.addEventListener('change', (e) => {
+        handleFileUpload(e.target.files);
+        e.target.value = '';
+    });
+
+function updateSidebarList() {
+    if (AppState.documents.length === 0)
+        return;
+
+    if (DOM.fileList) {
+        DOM.fileList.innerHTML = AppState.documents.map(doc => {
+            const isActive = AppState.activeDocId === doc.id;
+            return `
+            <div onclick="selectDocument('${doc.id}')" class="file-item cursor-pointer p-3 rounded-xl text-sm border ${isActive ? 'bg-white dark:bg-gray-800 border-teal-200 dark:border-teal-800/50 shadow-sm' : 'border-transparent hover:bg-gray-100 dark:hover:bg-gray-800/50'} transition-all flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg ${isActive ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'} flex items-center justify-center shrink-0 transition-colors"><i class="${isActive ? 'ph-fill' : 'ph'} ph-file-pdf text-lg"></i></div>
+                <div class="flex flex-col overflow-hidden">
+                    <span class="truncate font-medium ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'}">${doc.name}</span>
+                    <span class="text-[10px] text-gray-400 uppercase tracking-wide">${doc.pagesCount} Pages Analyzed</span>
+                </div>
+            </div>`;
+        }).join('');
+    }
+}
+
+async function selectDocument(docId) {
+    AppState.activeDocId = docId;
+    updateSidebarList();
+
+    const doc = AppState.documents.find(d => d.id === docId);
+    if (!doc)
+        return;
+
+    if (DOM.pdfCanvas)
+        DOM.pdfCanvas.classList.remove('hidden');
+
+    if (DOM.pdfControls) {
+        DOM.pdfControls.classList.remove('hidden');
+        DOM.pdfControls.classList.add('flex');
+    }
+
+    AppState.pdfDoc = await pdfjsLib.getDocument({
+        data: doc.arrayBuffer
+    }).promise;
+
+    AppState.pageNum = 1;
+
+    if (DOM.pdfPageCount)
+        DOM.pdfPageCount.textContent = AppState.pdfDoc.numPages;
+
+    renderPage(AppState.pageNum);
+
+    if (DOM.mindmapContainer)
+        DOM.mindmapContainer.innerHTML = `<div class="text-center p-8"><div class="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4"><i class="ph-fill ph-tree-structure text-3xl"></i></div><h3 class="text-lg font-bold mb-1">Knowledge Graph</h3><p class="text-sm text-gray-500">Click generate to map relationships.</p></div>`;
+
+    if (DOM.pptSlidesContainer)
+        DOM.pptSlidesContainer.innerHTML = `<div class="text-center p-8"><div class="w-16 h-16 bg-purple-50 dark:bg-purple-900/30 text-purple-500 rounded-full flex items-center justify-center mx-auto mb-4"><i class="ph-fill ph-presentation-chart text-3xl"></i></div><h3 class="text-lg font-bold mb-1">Presentation Deck</h3><p class="text-sm text-gray-500">Synthesize this paper into a pitch.</p></div>`;
+
+    if (DOM.pptControls)
+        DOM.pptControls.classList.add('hidden');
+
+    if (DOM.btnDownloadPpt)
+        DOM.btnDownloadPpt.classList.add('hidden');
+
+    if (DOM.chatHistory)
+        DOM.chatHistory.innerHTML = '';
+
+    appendMessage('bot', `I have analyzed **${doc.name}**. Ask me any clinical questions, and I will explicitly cite my sources.`);
+}
+
+function renderPage(num) {
+    AppState.pdfDoc.getPage(num).then(function (page) {
+        if (!DOM.pdfCanvas)
+            return;
+
+        const containerWidth = DOM.pdfCanvas.parentElement.clientWidth - 32;
+        const unscaledViewport = page.getViewport({ scale: 1.0 });
+        const scale = Math.min(1.5, containerWidth / unscaledViewport.width);
+        const viewport = page.getViewport({ scale: scale });
+
+        DOM.pdfCanvas.height = viewport.height;
+        DOM.pdfCanvas.width = viewport.width;
+
+        page.render({
+            canvasContext: DOM.pdfCanvas.getContext('2d'), viewport: viewport
+        });
+    });
+
+    if (DOM.pdfPageNum)
+        DOM.pdfPageNum.value = num;
+}
+
+if (DOM.pdfPageNum) {
+    DOM.pdfPageNum.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            let desiredPage = parseInt(e.target.value);
+
+            if (desiredPage >= 1 && desiredPage <= AppState.pdfDoc.numPages) {
+                AppState.pageNum = desiredPage;
+                renderPage(AppState.pageNum);
+                e.target.blur();
             }
-        )
-        
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail="Export Failed")
+
+            else {
+                e.target.value = AppState.pageNum;
+            }
+        }
+    });
+}
+
+if (DOM.pdfPrev)
+    DOM.pdfPrev.addEventListener('click', () => { if (AppState.pageNum > 1) { AppState.pageNum--; renderPage(AppState.pageNum); } });
+
+if (DOM.pdfNext)
+    DOM.pdfNext.addEventListener('click', () => { if (AppState.pageNum < AppState.pdfDoc.numPages) { AppState.pageNum++; renderPage(AppState.pageNum); } });
+
+/** API CALL HELPER **/
+async function callBackend(endpoint, payload) {
+    try {
+        const res = await fetch(`${AppState.backendUrl}/api/${endpoint}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ detail: "Server Error or Timeout" }));
+            throw new Error(err.detail || `HTTP ${res.status}`);
+        }
+
+        return await res.json();
+    }
+
+    catch (e) {
+        if (e.message.includes("Failed to fetch"))
+            throw new Error("Connection dropped. Ensure backend is running.");
+        throw e;
+    }
+}
+
+/** FEATURE: KNOWLEDGE GRAPH **/
+if (DOM.btnRegenGraph)
+    DOM.btnRegenGraph.addEventListener('click', () => renderMindMap(true));
+
+async function renderMindMap(forceRegenerate = false) {
+    const doc = AppState.documents.find(d => d.id === AppState.activeDocId);
+
+    if (!doc)
+        return showToast("Select a document first.", "error");
+
+    if (forceRegenerate || !doc.mindmapCode) {
+        showOverlay("Analyzing Medical Concepts...\nDrawing Knowledge Graph...");
+
+        try {
+            const data = await callBackend('generate-graph', { doc_id: doc.id });
+            doc.mindmapCode = data.mermaid_code;
+        }
+
+        catch (e) {
+            showToast(e.message, "error"); hideOverlay(); return;
+        }
+
+        hideOverlay();
+    }
+
+    try {
+        if (DOM.mindmapContainer)
+            DOM.mindmapContainer.innerHTML = `<div class="mermaid w-full h-full flex justify-center">${doc.mindmapCode}</div>`;
+
+        await mermaid.run();
+        const svg = DOM.mindmapContainer ? DOM.mindmapContainer.querySelector('svg') : null;
+
+        if (svg) {
+            let scale = 1;
+            DOM.mindmapContainer.addEventListener('wheel', (e) => {
+                e.preventDefault();
+
+                scale = scale + e.deltaY * -0.001;
+                scale = Math.min(Math.max(0.4, scale), 5);
+
+                svg.style.transform = `scale(${scale})`;
+                svg.style.transition = 'transform 0.1s';
+            });
+        }
+    }
+
+    catch (e) {
+        if (DOM.mindmapContainer)
+            DOM.mindmapContainer.innerHTML = `<div class="text-red-500 p-4"><h3>Mind Map Render Failed</h3><pre class="text-xs mt-2">${doc.mindmapCode}</pre></div>`;
+    }
+}
+
+/** FEATURE: PPT DECK **/
+if (DOM.btnRegenPpt)
+    DOM.btnRegenPpt.addEventListener('click', () => renderPpt(true));
+
+async function renderPpt(forceRegenerate = false) {
+    const doc = AppState.documents.find(d => d.id === AppState.activeDocId);
+
+    if (!doc)
+        return showToast("Select a document first.", "error");
+
+    if (forceRegenerate || !doc.pptData) {
+        showOverlay("Distilling key findings...\nGenerating Presentation Deck...");
+        try {
+            const data = await callBackend('generate-ppt', { doc_id: doc.id });
+            doc.pptData = data.slides;
+        }
+
+        catch (e) {
+            showToast(e.message, "error");
+            hideOverlay(); return;
+        }
+
+        hideOverlay();
+    }
+
+    AppState.pptSlides = doc.pptData;
+    AppState.currentPptSlide = 0;
+
+    updatePptView();
+}
+
+function updatePptView() {
+    if (!AppState.pptSlides || AppState.pptSlides.length === 0)
+        return;
+
+    if (DOM.pptControls)
+        DOM.pptControls.classList.remove('hidden');
+
+    if (DOM.btnDownloadPpt) {
+        DOM.btnDownloadPpt.classList.remove('hidden');
+        DOM.btnDownloadPpt.classList.add('flex');
+    }
+
+    if (DOM.pptTotalNum)
+        DOM.pptTotalNum.textContent = AppState.pptSlides.length;
+
+    if (DOM.pptCurrentNum)
+        DOM.pptCurrentNum.textContent = AppState.currentPptSlide + 1;
+
+    if (DOM.pptSlidesContainer) {
+        DOM.pptSlidesContainer.innerHTML = AppState.pptSlides.map((slide, index) => {
+            const isActive = index === AppState.currentPptSlide;
+            return `
+            <div class="slide-fade ${isActive ? 'slide-active' : 'slide-hidden'} w-full max-w-2xl bg-white dark:bg-gray-800 p-8 md:p-12 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700">
+                <div class="text-io-accent text-5xl mb-6 flex justify-center"><i class="ph-fill ${slide.icon || 'ph-flask'}"></i></div>
+                <h2 class="text-3xl font-bold mb-8 text-gray-900 dark:text-white leading-tight">${slide.title}</h2>
+                <ul class="text-left space-y-4">
+                ${slide.bullets.map(b => `<li class="flex items-start gap-3 text-lg text-gray-700 dark:text-gray-300"><i class="ph-fill ph-check-circle text-io-accent mt-1.5 shrink-0"></i><span class="leading-relaxed">${b}</span></li>`).join('')}
+                </ul>
+            </div>
+            `;
+        }).join('');
+    }
+}
+
+if (DOM.pptPrev)
+    DOM.pptPrev.addEventListener('click', () => { if (AppState.currentPptSlide > 0) { AppState.currentPptSlide--; updatePptView(); } });
+
+if (DOM.pptNext)
+    DOM.pptNext.addEventListener('click', () => { if (AppState.currentPptSlide < AppState.pptSlides.length - 1) { AppState.currentPptSlide++; updatePptView(); } });
+
+// TRIGGER PPTX DOWNLOAD
+if (DOM.btnDownloadPpt) {
+    DOM.btnDownloadPpt.addEventListener('click', async () => {
+        const doc = AppState.documents.find(d => d.id === AppState.activeDocId);
+
+        if (!doc)
+            return showToast("Select a document first.", "error");
+
+        showToast("Generating PowerPoint file...", "info");
+
+        try {
+            const res = await fetch(`${AppState.backendUrl}/api/export-ppt`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ doc_id: doc.id })
+            });
+
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({ detail: "Export failed" }));
+                throw new Error(err.detail || "Failed to generate PPTX");
+            }
+
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+
+            a.href = url;
+            a.download = `${doc.name.replace('.pdf', '')}_Presentation.pptx`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+
+            window.URL.revokeObjectURL(url);
+
+            showToast("Download complete!", "success");
+        }
+
+        catch (e) {
+            showToast(e.message, "error");
+        }
+    });
+}
+
+/** CHATBOT LOGIC **/
+if (DOM.chatForm) {
+    DOM.chatForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const query = DOM.chatInput.value.trim();
+
+        if (!query)
+            return;
+
+        const doc = AppState.documents.find(d => d.id === AppState.activeDocId);
+
+        if (!doc)
+            return showToast("Upload a medical document first.", "error");
+
+        appendMessage('user', query);
+        DOM.chatInput.value = '';
+        const typingIndicatorId = appendTypingIndicator();
+
+        try {
+            const data = await callBackend('chat', { query: query, doc_id: doc.id });
+            removeMessage(typingIndicatorId); appendMessage('bot', data.reply);
+        }
+
+        catch (error) {
+            removeMessage(typingIndicatorId); appendMessage('bot', `**Connection Error:** ${error.message}`);
+        }
+    });
+}
+
+function appendMessage(sender, text) {
+    if (!DOM.chatHistory)
+        return;
+
+    const div = document.createElement('div');
+    div.className = 'flex gap-3';
+
+    if (sender === 'user') {
+        div.innerHTML = `<div class="flex-1 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-3.5 rounded-2xl rounded-tr-sm shadow-sm border border-gray-200 dark:border-gray-700 ml-8 text-sm">${marked.parse(text)}</div>
+        <div class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center shrink-0 text-gray-600 dark:text-gray-300"><i class="ph-fill ph-user"></i></div>`;
+    }
+
+    else {
+        div.innerHTML = `<div class="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center shrink-0 text-io-accent border border-teal-200 dark:border-teal-800"><i class="ph-fill ph-robot text-lg"></i></div>
+        <div class="flex-1 bg-white dark:bg-gray-800 p-3.5 rounded-2xl rounded-tl-sm shadow-sm border border-gray-100 dark:border-gray-700 text-gray-800 dark:text-gray-200 prose dark:prose-invert prose-sm max-w-none leading-relaxed">${marked.parse(text)}</div>`;
+    }
+
+    DOM.chatHistory.appendChild(div);
+    DOM.chatHistory.scrollTop = DOM.chatHistory.scrollHeight;
+}
+
+function appendTypingIndicator() {
+    if (!DOM.chatHistory)
+        return null;
+
+    const id = 'typing-' + Date.now();
+    const div = document.createElement('div');
+
+    div.id = id;
+    div.className = 'flex gap-3 items-center text-gray-400 text-xs font-medium uppercase tracking-wider';
+    div.innerHTML = `<div class="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center shrink-0 text-io-accent border border-teal-200 dark:border-teal-800 opacity-50"><i class="ph-fill ph-robot text-lg"></i></div>Semantic Search in progress...`;
+
+    DOM.chatHistory.appendChild(div);
+    DOM.chatHistory.scrollTop = DOM.chatHistory.scrollHeight;
+
+    return id;
+}
+
+function removeMessage(id) {
+    const el = document.getElementById(id);
+
+    if (el)
+        el.remove();
+}
+
+if (DOM.chatInput) {
+    DOM.chatInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            DOM.chatForm.dispatchEvent(new Event('submit'));
+        }
+    });
+}
