@@ -1,7 +1,7 @@
 /** APPLICATION STATE **/
 const AppState = {
-    backendUrl: 'https://medagent-x.onrender.com',
-    documents: [], 
+    backendUrl: 'https://medagent-x-backend.onrender.com',
+    documents: [], // { id, name, arrayBuffer, pagesCount, mindmapCode, pptData }
     activeDocId: null,
     pdfDoc: null,
     pageNum: 1,
@@ -11,24 +11,26 @@ const AppState = {
 
 // DOM Elements
 const DOM = {
-    apiStatusIndicator: document.getElementById('api-status-indicator'),
-    btnTheme: document.getElementById('btn-theme'),
-    fileUpload: document.getElementById('file-upload'),
+    landingView: document.getElementById('landing-view'),
+    appWorkspace: document.getElementById('app-workspace'),
+    apiStatusIndicators: [document.getElementById('api-status-indicator'), document.getElementById('landing-status-indicator')],
+    apiStatusTexts: [document.getElementById('api-status-text'), document.getElementById('landing-status-text')],
+    btnThemeLanding: document.getElementById('btn-theme-landing'),
+    btnThemeApp: document.getElementById('btn-theme-app'),
+    btnHome: document.getElementById('btn-home'),
+    heroFileUpload: document.getElementById('hero-file-upload'),
+    sidebarFileUpload: document.getElementById('sidebar-file-upload'),
     fileList: document.getElementById('file-list'),
     tabBtns: document.querySelectorAll('.tab-btn'),
     tabContents: document.querySelectorAll('.tab-content'),
-
     pdfCanvas: document.getElementById('pdf-canvas'),
     pdfControls: document.getElementById('pdf-controls'),
-    pdfEmptyState: document.getElementById('pdf-empty-state'),
     pdfPrev: document.getElementById('pdf-prev'),
     pdfNext: document.getElementById('pdf-next'),
     pdfPageNum: document.getElementById('pdf-page-num'),
     pdfPageCount: document.getElementById('pdf-page-count'),
-
     mindmapContainer: document.getElementById('mindmap-container'),
     btnRegenGraph: document.getElementById('btn-regen-graph'),
-
     pptContainer: document.getElementById('ppt-container'),
     pptSlidesContainer: document.getElementById('ppt-slides'),
     pptControls: document.getElementById('ppt-controls'),
@@ -37,38 +39,93 @@ const DOM = {
     pptCurrentNum: document.getElementById('ppt-current-num'),
     pptTotalNum: document.getElementById('ppt-total-num'),
     btnRegenPpt: document.getElementById('btn-regen-ppt'),
-
     chatHistory: document.getElementById('chat-history'),
     chatForm: document.getElementById('chat-form'),
     chatInput: document.getElementById('chat-input'),
-
     loadingOverlay: document.getElementById('loading-overlay'),
-    loadingText: document.getElementById('loading-text')
+    loadingText: document.getElementById('loading-text'),
+    toastContainer: document.getElementById('toast-container')
 };
+
+/** TOAST NOTIFICATION SYSTEM **/
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    let bgClass = 'bg-gray-800 dark:bg-gray-700';
+    let icon = '<i class="ph-fill ph-info text-blue-400"></i>';
+
+    if (type === 'error') {
+        bgClass = 'bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800';
+        icon = '<i class="ph-fill ph-warning-circle text-red-500"></i>';
+    }
+
+    else if (type === 'success') {
+        bgClass = 'bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800';
+        icon = '<i class="ph-fill ph-check-circle text-green-500"></i>';
+    }
+
+    toast.className = `flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg ${bgClass} text-sm font-medium text-gray-800 dark:text-gray-100 transform translate-y-10 opacity-0 transition-all duration-300 pointer-events-auto max-w-sm`;
+    toast.innerHTML = `${icon} <span>${message}</span>`;
+
+    DOM.toastContainer.appendChild(toast);
+
+    setTimeout(() => toast.classList.remove('translate-y-10', 'opacity-0'), 10);
+    setTimeout(() => {
+        toast.classList.add('translate-y-10', 'opacity-0');
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
+}
 
 /** INITIALIZATION & THEME **/
 try {
-    mermaid.initialize({ startOnLoad: false, theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default' });
-} catch (e) { console.warn("Mermaid init failed", e); }
+    mermaid.initialize({
+        startOnLoad: false,
+        theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default'
+    });
+}
 
-DOM.btnTheme.addEventListener('click', () => {
+catch (e) {
+
+}
+
+function toggleTheme() {
     document.documentElement.classList.toggle('dark');
-    try { mermaid.initialize({ theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default' }); } catch (e) {}
-    if (AppState.activeDocId) 
+
+    try {
+        mermaid.initialize({
+            theme: document.documentElement.classList.contains('dark') ? 'dark' : 'default'
+        });
+    }
+
+    catch (e) {
+
+    }
+
+    if (AppState.activeDocId)
         renderMindMap(false);
+}
+
+DOM.btnThemeLanding.addEventListener('click', toggleTheme);
+DOM.btnThemeApp.addEventListener('click', toggleTheme);
+
+DOM.btnHome.addEventListener('click', () => {
+    DOM.appWorkspace.classList.add('hidden');
+    DOM.landingView.classList.remove('hidden');
+    DOM.landingView.classList.add('flex');
 });
 
-// Fullscreen & Tabs
+function openWorkspace() {
+    DOM.landingView.classList.remove('flex');
+    DOM.landingView.classList.add('hidden');
+    DOM.appWorkspace.classList.remove('hidden');
+    DOM.appWorkspace.classList.add('flex');
+}
+
 document.querySelectorAll('.btn-fullscreen').forEach(btn => {
     btn.addEventListener('click', (e) => {
         const targetId = e.target.closest('button').dataset.target;
-        const container = document.getElementById(targetId);
-        
-        container.classList.toggle('fullscreen-mode');
-        
+        document.getElementById(targetId).classList.toggle('fullscreen-mode');
         const icon = e.target.closest('button').querySelector('i');
-        icon.classList.toggle('ph-corners-out');
-        icon.classList.toggle('ph-corners-in');
+        icon.classList.toggle('ph-corners-out'); icon.classList.toggle('ph-corners-in');
     });
 });
 
@@ -76,156 +133,198 @@ DOM.tabBtns.forEach(btn => {
     btn.addEventListener('click', () => {
         DOM.tabBtns.forEach(b => {
             b.classList.remove('active', 'border-b-2', 'border-io-accent', 'text-io-accent');
-            b.classList.add('text-gray-500');
+            b.classList.add('text-gray-500', 'border-transparent');
         });
-        
+
         btn.classList.add('active', 'border-b-2', 'border-io-accent', 'text-io-accent');
-        btn.classList.remove('text-gray-500');
+        btn.classList.remove('text-gray-500', 'border-transparent');
 
         const targetId = btn.dataset.target;
+
         DOM.tabContents.forEach(content => {
             content.classList.toggle('hidden', content.id !== targetId);
             content.classList.toggle('flex', content.id === targetId);
         });
 
-        if (targetId === 'view-graph' && AppState.activeDocId) 
+        if (targetId === 'view-graph' && AppState.activeDocId)
             renderMindMap(false);
     });
 });
 
 function showOverlay(text) {
-    DOM.loadingText.innerText = text;
-    DOM.loadingOverlay.classList.replace('hidden', 'flex');
+    DOM.loadingText.innerText = text; DOM.loadingOverlay.classList.remove('hidden');
+    DOM.loadingOverlay.classList.add('flex');
 }
 
 function hideOverlay() {
-    DOM.loadingOverlay.classList.replace('flex', 'hidden');
+    DOM.loadingOverlay.classList.add('hidden');
+    DOM.loadingOverlay.classList.remove('flex');
 }
 
-// Check Backend Connection
 async function checkBackendConnection() {
-    const statusText = DOM.apiStatusIndicator ? DOM.apiStatusIndicator.nextElementSibling : null;
     try {
         const res = await fetch(`${AppState.backendUrl}/`);
-        if (res.ok && DOM.apiStatusIndicator) {
-            DOM.apiStatusIndicator.classList.replace('bg-red-500', 'bg-green-500');
-            DOM.apiStatusIndicator.classList.add('shadow-[0_0_8px_#22c55e]');
-            
-            if (statusText) 
-                statusText.textContent = "Backend Connected";
+
+        if (res.ok) {
+            DOM.apiStatusIndicators.forEach(el => {
+                if (el) {
+                    el.classList.replace('bg-red-500', 'bg-green-500');
+                    el.classList.replace('shadow-[0_0_8px_#ef4444]', 'shadow-[0_0_8px_#22c55e]');
+                }
+            });
+
+            DOM.apiStatusTexts.forEach(el => {
+                if (el)
+                    el.textContent = "Backend Connected";
+            });
         }
-        
-    } 
-    
+    }
+
     catch (e) {
-        if (DOM.apiStatusIndicator) {
-            DOM.apiStatusIndicator.classList.replace('bg-green-500', 'bg-red-500');
-            DOM.apiStatusIndicator.classList.remove('shadow-[0_0_8px_#22c55e]');
-            if (statusText) statusText.textContent = "Backend Disconnected";
-        }
+        DOM.apiStatusIndicators.forEach(el => {
+            if (el) {
+                el.classList.replace('bg-green-500', 'bg-red-500');
+                el.classList.replace('shadow-[0_0_8px_#22c55e]', 'shadow-[0_0_8px_#ef4444]');
+            }
+        });
+
+        DOM.apiStatusTexts.forEach(el => {
+            if (el) el.textContent = "Backend Offline";
+        });
     }
 }
 
-checkBackendConnection();
+setTimeout(checkBackendConnection, 500);
 
 /** DOCUMENT UPLOAD & PARSING **/
-DOM.fileUpload.addEventListener('change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+async function handleFileUpload(file) {
+    if (!file)
+        return;
 
-    showOverlay("Uploading to Server...\nVerifying Medical Content...");
+    if (file.type !== "application/pdf")
+        return showToast("Please upload PDF files only.", "error");
+
+    showOverlay("Uploading to Server...\nChunking & Embedding Document...");
 
     const formData = new FormData();
     formData.append('file', file);
 
     try {
-        const res = await fetch(`${AppState.backendUrl}/api/upload`, {
-            method: 'POST',
-            body: formData
-        });
+        const res = await fetch(`${AppState.backendUrl}/api/upload`, { method: 'POST', body: formData });
 
         if (!res.ok) {
-            const errorText = await res.json().catch(() => ({detail: "Server connection failed."}));
-            throw new Error(errorText.detail || "Failed to upload document");
+            const errorText = await res.json().catch(() => ({
+                detail: "Server connection failed."
+            }));
+
+            throw new Error(errorText.detail || "Upload failed");
         }
 
         const data = await res.json();
         const arrayBuffer = await file.arrayBuffer();
 
         AppState.documents.push({
-            id: crypto.randomUUID(),
+            id: data.doc_id,
             name: file.name,
-            file: file,
             arrayBuffer: arrayBuffer,
-            pages: data.pages,
+            pagesCount: data.pages_count,
             mindmapCode: null,
             pptData: null
         });
 
+        showToast("Document verified and Vectorized successfully!", "success");
         updateSidebarList();
+
+        if (!DOM.landingView.classList.contains('hidden'))
+            openWorkspace();
+
         selectDocument(AppState.documents[AppState.documents.length - 1].id);
-    } 
-    
+
+    }
+
     catch (err) {
-        alert(`Failed to upload ${file.name}: ${err.message}`);
-    } 
-    
+        showToast(err.message, "error");
+    }
+
     finally {
         hideOverlay();
-        e.target.value = ''; // Reset input
     }
+}
+
+DOM.heroFileUpload.addEventListener('change', (e) => {
+    handleFileUpload(e.target.files[0]); e.target.value = '';
+});
+
+DOM.sidebarFileUpload.addEventListener('change', (e) => {
+    handleFileUpload(e.target.files[0]); e.target.value = '';
 });
 
 function updateSidebarList() {
-    if (AppState.documents.length === 0) {
-        DOM.fileList.innerHTML = `<div class="text-center text-gray-400 text-sm mt-10 px-4">No documents uploaded.</div>`;
+    if (AppState.documents.length === 0)
         return;
-    }
-    
-    DOM.fileList.innerHTML = AppState.documents.map(doc => `
-        <div onclick="selectDocument('${doc.id}')" class="file-item cursor-pointer p-3 rounded-md text-sm border border-transparent ${AppState.activeDocId === doc.id ? 'bg-teal-50 dark:bg-teal-900/30 border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-200 font-medium' : 'hover:bg-gray-100 dark:hover:bg-gray-700/50 text-gray-700 dark:text-gray-300'} transition-colors flex items-center gap-2 truncate">
-            <i class="ph-fill ph-file-pdf text-red-500"></i>
-            <span class="truncate" title="${doc.name}">${doc.name}</span>
-        </div>
-    `).join('');
+
+    DOM.fileList.innerHTML = AppState.documents.map(doc => {
+        const isActive = AppState.activeDocId === doc.id;
+        return `
+        <div onclick="selectDocument('${doc.id}')" class="file-item cursor-pointer p-3 rounded-xl text-sm border ${isActive ? 'bg-white dark:bg-gray-800 border-teal-200 dark:border-teal-800/50 shadow-sm' : 'border-transparent hover:bg-gray-100 dark:hover:bg-gray-800/50'} transition-all flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg ${isActive ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'} flex items-center justify-center shrink-0 transition-colors"><i class="${isActive ? 'ph-fill' : 'ph'} ph-file-pdf text-lg"></i></div>
+            <div class="flex flex-col overflow-hidden">
+                <span class="truncate font-medium ${isActive ? 'text-gray-900 dark:text-white' : 'text-gray-600 dark:text-gray-400'}">${doc.name}</span>
+                <span class="text-[10px] text-gray-400 uppercase tracking-wide">${doc.pagesCount} Pages Analyzed</span>
+            </div>
+        </div>`;
+    }).join('');
 }
 
 async function selectDocument(docId) {
-    AppState.activeDocId = docId;
-    updateSidebarList();
-
+    AppState.activeDocId = docId; updateSidebarList();
     const doc = AppState.documents.find(d => d.id === docId);
-    if (!doc) 
+
+    if (!doc)
         return;
 
-    DOM.pdfEmptyState.classList.add('hidden');
     DOM.pdfCanvas.classList.remove('hidden');
     DOM.pdfControls.classList.remove('hidden');
     DOM.pdfControls.classList.add('flex');
 
-    AppState.pdfDoc = await pdfjsLib.getDocument({ data: doc.arrayBuffer }).promise;
+    AppState.pdfDoc = await pdfjsLib.getDocument({
+        data: doc.arrayBuffer
+    }).promise;
+
     AppState.pageNum = 1;
+
     DOM.pdfPageCount.textContent = AppState.pdfDoc.numPages;
+
     renderPage(AppState.pageNum);
 
-    DOM.mindmapContainer.innerHTML = '<div class="text-gray-400 text-center">Click Regenerate to analyze paper and build Knowledge Graph.</div>';
-    DOM.pptSlidesContainer.innerHTML = '<div class="text-gray-400 text-center">Click Regenerate to analyze paper and build PPT Deck.</div>';
+    DOM.mindmapContainer.innerHTML = `<div class="text-center p-8"><div class="w-16 h-16 bg-blue-50 dark:bg-blue-900/30 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4"><i class="ph-fill ph-tree-structure text-3xl"></i></div><h3 class="text-lg font-bold mb-1">Knowledge Graph</h3><p class="text-sm text-gray-500">Click generate to map relationships.</p></div>`;
+    DOM.pptSlidesContainer.innerHTML = `<div class="text-center p-8"><div class="w-16 h-16 bg-purple-50 dark:bg-purple-900/30 text-purple-500 rounded-full flex items-center justify-center mx-auto mb-4"><i class="ph-fill ph-presentation-chart text-3xl"></i></div><h3 class="text-lg font-bold mb-1">Presentation Deck</h3><p class="text-sm text-gray-500">Synthesize this paper into a pitch.</p></div>`;
     DOM.pptControls.classList.add('hidden');
+    DOM.chatHistory.innerHTML = '';
 
-    DOM.chatHistory.innerHTML = ''; // Clear chat history
-    appendMessage('bot', `I have analyzed **${doc.name}**. I'm ready to answer your questions. I will explicitly cite page numbers based on the uploaded content.`);
+    appendMessage('bot', `I have analyzed **${doc.name}**. Ask me any clinical questions, and I will explicitly cite my sources.`);
 }
 
 function renderPage(num) {
     AppState.pdfDoc.getPage(num).then(function (page) {
-        const viewport = page.getViewport({ scale: 1.5 });
-        
+        const containerWidth = DOM.pdfCanvas.parentElement.clientWidth - 32;
+        const unscaledViewport = page.getViewport({
+            scale: 1.0
+        });
+        const scale = Math.min(1.5, containerWidth / unscaledViewport.width);
+        const viewport = page.getViewport({
+            scale: scale
+        });
+
         DOM.pdfCanvas.height = viewport.height;
         DOM.pdfCanvas.width = viewport.width;
-        
-        page.render({ canvasContext: DOM.pdfCanvas.getContext('2d'), viewport: viewport });
+
+        page.render({
+            canvasContext: DOM.pdfCanvas.getContext('2d'),
+            viewport: viewport
+        });
     });
-    
+
     DOM.pdfPageNum.value = num;
 }
 
@@ -233,42 +332,57 @@ DOM.pdfPageNum.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
         e.preventDefault();
         let desiredPage = parseInt(e.target.value);
-        
+
         if (desiredPage >= 1 && desiredPage <= AppState.pdfDoc.numPages) {
             AppState.pageNum = desiredPage;
             renderPage(AppState.pageNum);
             e.target.blur();
-        } 
-        
+        }
+
         else {
             e.target.value = AppState.pageNum;
         }
     }
 });
 
-DOM.pdfPrev.addEventListener('click', () => { if (AppState.pageNum > 1) { AppState.pageNum--; renderPage(AppState.pageNum); }});
-DOM.pdfNext.addEventListener('click', () => { if (AppState.pageNum < AppState.pdfDoc.numPages) { AppState.pageNum++; renderPage(AppState.pageNum); }});
+DOM.pdfPrev.addEventListener('click', () => {
+    if (AppState.pageNum > 1) {
+        AppState.pageNum--;
+        renderPage(AppState.pageNum);
+    }
+});
+
+DOM.pdfNext.addEventListener('click', () => {
+    if (AppState.pageNum < AppState.pdfDoc.numPages) {
+        AppState.pageNum++;
+        renderPage(AppState.pageNum);
+    }
+});
 
 /** API CALL HELPER **/
 async function callBackend(endpoint, payload) {
     try {
         const res = await fetch(`${AppState.backendUrl}/api/${endpoint}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+            method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload)
         });
-        
+
         if (!res.ok) {
-            const err = await res.json().catch(() => ({detail: "Server Error or Timeout"}));
+            const err = await res.json().catch(() => ({
+                detail: "Server Error or Timeout"
+            }));
+
             throw new Error(err.detail || `HTTP ${res.status}`);
         }
-        
+
         return await res.json();
-    } 
-    
+
+    }
+
     catch (e) {
-        if (e.message === "Failed to fetch") 
-            throw new Error("Connection dropped. The server might be sleeping or analyzing a very large file. Try again.");
+        if (e.message.includes("Failed to fetch"))
+            throw new Error("Connection dropped. Ensure backend is running.");
+
         throw e;
     }
 }
@@ -277,45 +391,46 @@ async function callBackend(endpoint, payload) {
 DOM.btnRegenGraph.addEventListener('click', () => renderMindMap(true));
 async function renderMindMap(forceRegenerate = false) {
     const doc = AppState.documents.find(d => d.id === AppState.activeDocId);
-    if (!doc) 
-        return alert("Select a document first.");
+
+    if (!doc)
+        return showToast("Select a document first.", "error");
 
     if (forceRegenerate || !doc.mindmapCode) {
         showOverlay("Analyzing Medical Concepts...\nDrawing Knowledge Graph...");
+
         try {
-            const context = doc.pages.map(page => `[Page ${page.page}]\n${page.text}`).join("\n\n");
-            const data = await callBackend('generate-graph', { context });
+            const data = await callBackend('generate-graph', {
+                doc_id: doc.id
+            });
+
             doc.mindmapCode = data.mermaid_code;
-        } 
-        
+        }
+
         catch (e) {
-            alert("Error generating mind map: " + e.message);
-            hideOverlay(); return;
+            showToast(e.message, "error"); hideOverlay();
+            return;
         }
 
         hideOverlay();
     }
 
     try {
-        DOM.mindmapContainer.innerHTML = `<div class="mermaid">${doc.mindmapCode}</div>`;
+        DOM.mindmapContainer.innerHTML = `<div class="mermaid w-full h-full flex justify-center">${doc.mindmapCode}</div>`;
         await mermaid.run();
-        
         const svg = DOM.mindmapContainer.querySelector('svg');
+
         if (svg) {
             let scale = 1;
-            
             DOM.mindmapContainer.addEventListener('wheel', (e) => {
-                e.preventDefault();
-                scale += e.deltaY * -0.001;
-                scale = Math.min(Math.max(0.2, scale), 4);
-                svg.style.transform = `scale(${scale})`;
-                svg.style.transition = 'transform 0.1s';
+                e.preventDefault(); scale += e.deltaY * -0.001;
+                scale = Math.min(Math.max(0.4, scale), 5);
+                svg.style.transform = `scale(${scale})`; svg.style.transition = 'transform 0.1s';
             });
         }
-    } 
-    
+    }
+
     catch (e) {
-        DOM.mindmapContainer.innerHTML = `<div class="text-red-500 p-4"><h3>Mind Map Render Failed</h3><pre>${doc.mindmapCode}</pre></div>`;
+        DOM.mindmapContainer.innerHTML = `<div class="text-red-500 p-4"><h3>Mind Map Render Failed</h3><pre class="text-xs mt-2">${doc.mindmapCode}</pre></div>`;
     }
 }
 
@@ -323,104 +438,109 @@ async function renderMindMap(forceRegenerate = false) {
 DOM.btnRegenPpt.addEventListener('click', () => renderPpt(true));
 async function renderPpt(forceRegenerate = false) {
     const doc = AppState.documents.find(d => d.id === AppState.activeDocId);
-    if (!doc) 
-        return alert("Select a document first.");
+
+    if (!doc)
+        return showToast("Select a document first.", "error");
 
     if (forceRegenerate || !doc.pptData) {
         showOverlay("Distilling key findings...\nGenerating Presentation Deck...");
+
         try {
-            const context = doc.pages.map(page => `[Page ${page.page}]\n${page.text}`).join("\n\n");
-            const data = await callBackend('generate-ppt', { context });
+            const data = await callBackend('generate-ppt', { doc_id: doc.id });
             doc.pptData = data.slides;
-        } 
-        
-        catch (e) {
-            alert("Error generating PPT: " + e.message);
-            hideOverlay(); return;
         }
+
+        catch (e) {
+            showToast(e.message, "error"); hideOverlay(); return;
+        }
+
         hideOverlay();
     }
 
-    AppState.pptSlides = doc.pptData;
-    AppState.currentPptSlide = 0;
+    AppState.pptSlides = doc.pptData; AppState.currentPptSlide = 0;
     updatePptView();
 }
 
 function updatePptView() {
-    if (!AppState.pptSlides || AppState.pptSlides.length === 0) 
+    if (!AppState.pptSlides || AppState.pptSlides.length === 0)
         return;
 
     DOM.pptControls.classList.remove('hidden');
     DOM.pptTotalNum.textContent = AppState.pptSlides.length;
     DOM.pptCurrentNum.textContent = AppState.currentPptSlide + 1;
 
-    const html = AppState.pptSlides.map((slide, index) => {
+    DOM.pptSlidesContainer.innerHTML = AppState.pptSlides.map((slide, index) => {
         const isActive = index === AppState.currentPptSlide;
+
         return `
-        <div class="slide-fade ${isActive ? 'slide-active' : 'slide-hidden'} w-full max-w-2xl bg-white dark:bg-gray-800 p-10 rounded-xl shadow-lg border border-gray-100 dark:border-gray-700">
+        <div class="slide-fade ${isActive ? 'slide-active' : 'slide-hidden'} w-full max-w-2xl bg-white dark:bg-gray-800 p-8 md:p-12 rounded-2xl shadow-xl border border-gray-100 dark:border-gray-700">
             <div class="text-io-accent text-5xl mb-6 flex justify-center"><i class="ph-fill ${slide.icon || 'ph-flask'}"></i></div>
-            <h2 class="text-3xl font-bold mb-6 text-gray-900 dark:text-white">${slide.title}</h2>
+            <h2 class="text-3xl font-bold mb-8 text-gray-900 dark:text-white leading-tight">${slide.title}</h2>
             <ul class="text-left space-y-4">
-            ${slide.bullets.map(b => `
-                <li class="flex items-start gap-3 text-lg text-gray-700 dark:text-gray-300">
-                    <i class="ph-fill ph-check-circle text-io-accent mt-1 shrink-0"></i><span>${b}</span>
-                </li>
-            `).join('')}
+            ${slide.bullets.map(b => `<li class="flex items-start gap-3 text-lg text-gray-700 dark:text-gray-300"><i class="ph-fill ph-check-circle text-io-accent mt-1.5 shrink-0"></i><span class="leading-relaxed">${b}</span></li>`).join('')}
             </ul>
         </div>
         `;
     }).join('');
-
-    DOM.pptSlidesContainer.innerHTML = html;
 }
 
-DOM.pptPrev.addEventListener('click', () => { if (AppState.currentPptSlide > 0) { AppState.currentPptSlide--; updatePptView(); }});
-DOM.pptNext.addEventListener('click', () => { if (AppState.currentPptSlide < AppState.pptSlides.length - 1) { AppState.currentPptSlide++; updatePptView(); }});
+DOM.pptPrev.addEventListener('click', () => {
+    if (AppState.currentPptSlide > 0) {
+        AppState.currentPptSlide--; updatePptView();
+    }
+});
+
+DOM.pptNext.addEventListener('click', () => {
+    if (AppState.currentPptSlide < AppState.pptSlides.length - 1) {
+        AppState.currentPptSlide++; updatePptView();
+    }
+});
 
 /** CHATBOT LOGIC **/
 DOM.chatForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     const query = DOM.chatInput.value.trim();
-    if (!query) 
+
+    if (!query)
         return;
 
     const doc = AppState.documents.find(d => d.id === AppState.activeDocId);
-    
-    if (!doc) 
-        return alert("Please upload and select a medical document first.");
 
-    appendMessage('user', query);
-    DOM.chatInput.value = '';
+    if (!doc)
+        return showToast("Upload a medical document first.", "error");
+
+    appendMessage('user', query); DOM.chatInput.value = '';
     const typingIndicatorId = appendTypingIndicator();
 
     try {
-        const context = doc.pages.map(page => `[Page ${page.page}]\n${page.text}`).join("\n\n");
-        const data = await callBackend('chat', { query, context });
+        const data = await callBackend('chat', {
+            query: query, doc_id: doc.id
+        });
+
         removeMessage(typingIndicatorId);
         appendMessage('bot', data.reply);
-    } 
-    
+    }
+
     catch (error) {
         removeMessage(typingIndicatorId);
-        appendMessage('bot', `**Error:** Failed to reach Agent. ${error.message}`);
+        appendMessage('bot', `**Connection Error:** ${error.message}`);
     }
 });
 
 function appendMessage(sender, text) {
     const div = document.createElement('div');
-    div.className = 'flex gap-2';
+    div.className = 'flex gap-3';
+
     if (sender === 'user') {
-        div.innerHTML = `
-        <div class="flex-1 bg-io-accent text-white p-3 rounded-lg rounded-tr-none shadow-sm ml-8">${marked.parse(text)}</div>
-        <div class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-600 flex items-center justify-center shrink-0 text-gray-700 dark:text-gray-300"><i class="ph-fill ph-user"></i></div>`;
-    } 
-    
-    else {
-        div.innerHTML = `
-        <div class="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900 flex items-center justify-center shrink-0 text-io-accent"><i class="ph-fill ph-robot"></i></div>
-        <div class="flex-1 bg-white dark:bg-gray-700 p-3 rounded-lg rounded-tl-none shadow-sm text-gray-800 dark:text-gray-200 prose dark:prose-invert prose-sm max-w-none">${marked.parse(text)}</div>`;
+        div.innerHTML = `<div class="flex-1 bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 p-3.5 rounded-2xl rounded-tr-sm shadow-sm border border-gray-200 dark:border-gray-700 ml-8 text-sm">${marked.parse(text)}</div>
+        <div class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center shrink-0 text-gray-600 dark:text-gray-300"><i class="ph-fill ph-user"></i></div>`;
     }
-    
+
+    else {
+        div.innerHTML = `<div class="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center shrink-0 text-io-accent border border-teal-200 dark:border-teal-800"><i class="ph-fill ph-robot text-lg"></i></div>
+        <div class="flex-1 bg-white dark:bg-gray-800 p-3.5 rounded-2xl rounded-tl-sm shadow-sm border border-gray-100 dark:border-gray-700 text-gray-800 dark:text-gray-200 prose dark:prose-invert prose-sm max-w-none leading-relaxed">${marked.parse(text)}</div>`;
+    }
+
     DOM.chatHistory.appendChild(div);
     DOM.chatHistory.scrollTop = DOM.chatHistory.scrollHeight;
 }
@@ -428,17 +548,27 @@ function appendMessage(sender, text) {
 function appendTypingIndicator() {
     const id = 'typing-' + Date.now();
     const div = document.createElement('div');
-    
-    div.id = id; div.className = 'flex gap-2 text-gray-500 text-sm italic items-center';
-    div.innerHTML = `<div class="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900 flex items-center justify-center shrink-0 text-io-accent opacity-50"><i class="ph-fill ph-robot"></i></div>Agent is processing...`;
-    
-    DOM.chatHistory.appendChild(div); DOM.chatHistory.scrollTop = DOM.chatHistory.scrollHeight;
-    
+
+    div.id = id;
+    div.className = 'flex gap-3 items-center text-gray-400 text-xs font-medium uppercase tracking-wider';
+    div.innerHTML = `<div class="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center shrink-0 text-io-accent border border-teal-200 dark:border-teal-800 opacity-50"><i class="ph-fill ph-robot text-lg"></i></div>Semantic Search in progress...`;
+
+    DOM.chatHistory.appendChild(div);
+    DOM.chatHistory.scrollTop = DOM.chatHistory.scrollHeight;
+
     return id;
 }
 
-function removeMessage(id) { 
-    const el = document.getElementById(id); if (el) el.remove(); 
+function removeMessage(id) {
+    const el = document.getElementById(id);
+
+    if (el)
+        el.remove();
 }
 
-DOM.chatInput.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); DOM.chatForm.dispatchEvent(new Event('submit')); }});
+DOM.chatInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        DOM.chatForm.dispatchEvent(new Event('submit'));
+    }
+});
