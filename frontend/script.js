@@ -39,6 +39,7 @@ const DOM = {
     pptCurrentNum: document.getElementById('ppt-current-num'),
     pptTotalNum: document.getElementById('ppt-total-num'),
     btnRegenPpt: document.getElementById('btn-regen-ppt'),
+    btnDownloadPpt: document.getElementById('btn-download-ppt'),
     chatHistory: document.getElementById('chat-history'),
     chatForm: document.getElementById('chat-form'),
     chatInput: document.getElementById('chat-input'),
@@ -50,6 +51,7 @@ const DOM = {
 /** TOAST NOTIFICATION SYSTEM **/
 function showToast(message, type = 'info') {
     const toast = document.createElement('div');
+
     let bgClass = 'bg-gray-800 dark:bg-gray-700';
     let icon = '<i class="ph-fill ph-info text-blue-400"></i>';
 
@@ -103,12 +105,12 @@ function toggleTheme() {
     if (AppState.activeDocId)
         renderMindMap(false);
 }
-
 DOM.btnThemeLanding.addEventListener('click', toggleTheme);
 DOM.btnThemeApp.addEventListener('click', toggleTheme);
 
 DOM.btnHome.addEventListener('click', () => {
     DOM.appWorkspace.classList.add('hidden');
+
     DOM.landingView.classList.remove('hidden');
     DOM.landingView.classList.add('flex');
 });
@@ -116,6 +118,7 @@ DOM.btnHome.addEventListener('click', () => {
 function openWorkspace() {
     DOM.landingView.classList.remove('flex');
     DOM.landingView.classList.add('hidden');
+
     DOM.appWorkspace.classList.remove('hidden');
     DOM.appWorkspace.classList.add('flex');
 }
@@ -123,7 +126,9 @@ function openWorkspace() {
 document.querySelectorAll('.btn-fullscreen').forEach(btn => {
     btn.addEventListener('click', (e) => {
         const targetId = e.target.closest('button').dataset.target;
+
         document.getElementById(targetId).classList.toggle('fullscreen-mode');
+
         const icon = e.target.closest('button').querySelector('i');
         icon.classList.toggle('ph-corners-out'); icon.classList.toggle('ph-corners-in');
     });
@@ -152,7 +157,8 @@ DOM.tabBtns.forEach(btn => {
 });
 
 function showOverlay(text) {
-    DOM.loadingText.innerText = text; DOM.loadingOverlay.classList.remove('hidden');
+    DOM.loadingText.innerText = text;
+    DOM.loadingOverlay.classList.remove('hidden');
     DOM.loadingOverlay.classList.add('flex');
 }
 
@@ -175,7 +181,7 @@ async function checkBackendConnection() {
 
             DOM.apiStatusTexts.forEach(el => {
                 if (el)
-                    el.textContent = "Backend Connected";
+                    el.textContent = "Backend Online";
             });
         }
     }
@@ -189,7 +195,8 @@ async function checkBackendConnection() {
         });
 
         DOM.apiStatusTexts.forEach(el => {
-            if (el) el.textContent = "Backend Offline";
+            if (el)
+                el.textContent = "Backend Offline";
         });
     }
 }
@@ -252,11 +259,13 @@ async function handleFileUpload(file) {
 }
 
 DOM.heroFileUpload.addEventListener('change', (e) => {
-    handleFileUpload(e.target.files[0]); e.target.value = '';
+    handleFileUpload(e.target.files[0]);
+    e.target.value = '';
 });
 
 DOM.sidebarFileUpload.addEventListener('change', (e) => {
-    handleFileUpload(e.target.files[0]); e.target.value = '';
+    handleFileUpload(e.target.files[0]);
+    e.target.value = '';
 });
 
 function updateSidebarList() {
@@ -265,6 +274,7 @@ function updateSidebarList() {
 
     DOM.fileList.innerHTML = AppState.documents.map(doc => {
         const isActive = AppState.activeDocId === doc.id;
+
         return `
         <div onclick="selectDocument('${doc.id}')" class="file-item cursor-pointer p-3 rounded-xl text-sm border ${isActive ? 'bg-white dark:bg-gray-800 border-teal-200 dark:border-teal-800/50 shadow-sm' : 'border-transparent hover:bg-gray-100 dark:hover:bg-gray-800/50'} transition-all flex items-center gap-3">
             <div class="w-8 h-8 rounded-lg ${isActive ? 'bg-teal-50 dark:bg-teal-900/30 text-teal-600 dark:text-teal-400' : 'bg-gray-100 dark:bg-gray-800 text-gray-500'} flex items-center justify-center shrink-0 transition-colors"><i class="${isActive ? 'ph-fill' : 'ph'} ph-file-pdf text-lg"></i></div>
@@ -273,6 +283,7 @@ function updateSidebarList() {
                 <span class="text-[10px] text-gray-400 uppercase tracking-wide">${doc.pagesCount} Pages Analyzed</span>
             </div>
         </div>`;
+
     }).join('');
 }
 
@@ -308,21 +319,13 @@ async function selectDocument(docId) {
 function renderPage(num) {
     AppState.pdfDoc.getPage(num).then(function (page) {
         const containerWidth = DOM.pdfCanvas.parentElement.clientWidth - 32;
-        const unscaledViewport = page.getViewport({
-            scale: 1.0
-        });
+        const unscaledViewport = page.getViewport({ scale: 1.0 });
         const scale = Math.min(1.5, containerWidth / unscaledViewport.width);
-        const viewport = page.getViewport({
-            scale: scale
-        });
+        const viewport = page.getViewport({ scale: scale });
 
-        DOM.pdfCanvas.height = viewport.height;
-        DOM.pdfCanvas.width = viewport.width;
+        DOM.pdfCanvas.height = viewport.height; DOM.pdfCanvas.width = viewport.width;
 
-        page.render({
-            canvasContext: DOM.pdfCanvas.getContext('2d'),
-            viewport: viewport
-        });
+        page.render({ canvasContext: DOM.pdfCanvas.getContext('2d'), viewport: viewport });
     });
 
     DOM.pdfPageNum.value = num;
@@ -362,21 +365,14 @@ DOM.pdfNext.addEventListener('click', () => {
 /** API CALL HELPER **/
 async function callBackend(endpoint, payload) {
     try {
-        const res = await fetch(`${AppState.backendUrl}/api/${endpoint}`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
+        const res = await fetch(`${AppState.backendUrl}/api/${endpoint}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
 
         if (!res.ok) {
-            const err = await res.json().catch(() => ({
-                detail: "Server Error or Timeout"
-            }));
-
+            const err = await res.json().catch(() => ({ detail: "Server Error or Timeout" }));
             throw new Error(err.detail || `HTTP ${res.status}`);
         }
 
         return await res.json();
-
     }
 
     catch (e) {
@@ -399,16 +395,12 @@ async function renderMindMap(forceRegenerate = false) {
         showOverlay("Analyzing Medical Concepts...\nDrawing Knowledge Graph...");
 
         try {
-            const data = await callBackend('generate-graph', {
-                doc_id: doc.id
-            });
-
+            const data = await callBackend('generate-graph', { doc_id: doc.id });
             doc.mindmapCode = data.mermaid_code;
         }
 
         catch (e) {
-            showToast(e.message, "error"); hideOverlay();
-            return;
+            showToast(e.message, "error"); hideOverlay(); return;
         }
 
         hideOverlay();
@@ -416,11 +408,13 @@ async function renderMindMap(forceRegenerate = false) {
 
     try {
         DOM.mindmapContainer.innerHTML = `<div class="mermaid w-full h-full flex justify-center">${doc.mindmapCode}</div>`;
+
         await mermaid.run();
         const svg = DOM.mindmapContainer.querySelector('svg');
 
         if (svg) {
             let scale = 1;
+
             DOM.mindmapContainer.addEventListener('wheel', (e) => {
                 e.preventDefault(); scale += e.deltaY * -0.001;
                 scale = Math.min(Math.max(0.4, scale), 5);
@@ -457,7 +451,9 @@ async function renderPpt(forceRegenerate = false) {
         hideOverlay();
     }
 
-    AppState.pptSlides = doc.pptData; AppState.currentPptSlide = 0;
+    AppState.pptSlides = doc.pptData;
+    AppState.currentPptSlide = 0;
+
     updatePptView();
 }
 
@@ -466,6 +462,11 @@ function updatePptView() {
         return;
 
     DOM.pptControls.classList.remove('hidden');
+
+    // Show download button now that PPT is generated
+    DOM.btnDownloadPpt.classList.remove('hidden');
+    DOM.btnDownloadPpt.classList.add('flex');
+
     DOM.pptTotalNum.textContent = AppState.pptSlides.length;
     DOM.pptCurrentNum.textContent = AppState.currentPptSlide + 1;
 
@@ -486,13 +487,61 @@ function updatePptView() {
 
 DOM.pptPrev.addEventListener('click', () => {
     if (AppState.currentPptSlide > 0) {
-        AppState.currentPptSlide--; updatePptView();
+        AppState.currentPptSlide--;
+        updatePptView();
     }
 });
 
 DOM.pptNext.addEventListener('click', () => {
     if (AppState.currentPptSlide < AppState.pptSlides.length - 1) {
-        AppState.currentPptSlide++; updatePptView();
+        AppState.currentPptSlide++;
+        updatePptView();
+    }
+});
+
+// TRIGGER PPTX DOWNLOAD
+DOM.btnDownloadPpt.addEventListener('click', async () => {
+    const doc = AppState.documents.find(d => d.id === AppState.activeDocId);
+    if (!doc)
+        return showToast("Select a document first.", "error");
+
+    showToast("Generating PowerPoint file...", "info");
+
+    try {
+        const res = await fetch(`${AppState.backendUrl}/api/export-ppt`, {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify({ doc_id: doc.id })
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ detail: "Export failed" }));
+            throw new Error(err.detail || "Failed to generate PPTX");
+        }
+
+        // Convert the backend binary stream into a downloadable file in the browser
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+
+        a.href = url;
+        a.download = `${doc.name.replace('.pdf', '')}_Presentation.pptx`;
+
+        document.body.appendChild(a);
+
+        a.click();
+        a.remove();
+
+        window.URL.revokeObjectURL(url);
+
+        showToast("Download complete!", "success");
+    }
+
+    catch (e) {
+        showToast(e.message, "error");
     }
 });
 
@@ -509,7 +558,9 @@ DOM.chatForm.addEventListener('submit', async (e) => {
     if (!doc)
         return showToast("Upload a medical document first.", "error");
 
-    appendMessage('user', query); DOM.chatInput.value = '';
+    appendMessage('user', query);
+    DOM.chatInput.value = '';
+
     const typingIndicatorId = appendTypingIndicator();
 
     try {
@@ -547,10 +598,8 @@ function appendMessage(sender, text) {
 
 function appendTypingIndicator() {
     const id = 'typing-' + Date.now();
-    const div = document.createElement('div');
+    const div = document.createElement('div'); div.id = id; div.className = 'flex gap-3 items-center text-gray-400 text-xs font-medium uppercase tracking-wider';
 
-    div.id = id;
-    div.className = 'flex gap-3 items-center text-gray-400 text-xs font-medium uppercase tracking-wider';
     div.innerHTML = `<div class="w-8 h-8 rounded-full bg-teal-100 dark:bg-teal-900/50 flex items-center justify-center shrink-0 text-io-accent border border-teal-200 dark:border-teal-800 opacity-50"><i class="ph-fill ph-robot text-lg"></i></div>Semantic Search in progress...`;
 
     DOM.chatHistory.appendChild(div);
