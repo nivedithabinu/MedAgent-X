@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MedAgent-X | Agentic Medical AI</title>
+    <title>MedAgent-X | Agentic AI Medical Research Assistant</title>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -89,8 +89,10 @@
             </div>
 
             <div class="flex items-center gap-6 font-medium text-sm">
-                <a href="#" class="hover:text-io-accent transition-colors">Features</a>
-                <a href="#" class="hover:text-io-accent transition-colors">Architecture</a>
+                <a onclick="showToast('Features coming soon!', 'info')"
+                    class="hover:text-io-accent transition-colors cursor-pointer">Features</a>
+                <a onclick="showToast('Architecture coming soon!', 'info')"
+                    class="hover:text-io-accent transition-colors cursor-pointer">Architecture</a>
 
                 <div
                     class="flex items-center gap-2 bg-white/50 dark:bg-gray-800/50 backdrop-blur-sm px-3 py-1.5 rounded-full border border-gray-200 dark:border-gray-700">
@@ -179,6 +181,13 @@
                         <span class="text-xs font-normal text-gray-500 ml-1">Workspace</span>
                     </span>
                 </div>
+            </div>
+
+            <div class="hidden md:flex items-center gap-6 font-medium text-sm">
+                <a onclick="showToast('Features coming soon!', 'info')"
+                    class="hover:text-io-accent transition-colors cursor-pointer text-gray-600 dark:text-gray-300">Features</a>
+                <a onclick="showToast('Architecture coming soon!', 'info')"
+                    class="hover:text-io-accent transition-colors cursor-pointer text-gray-600 dark:text-gray-300">Architecture</a>
             </div>
 
             <div class="flex items-center gap-4">
