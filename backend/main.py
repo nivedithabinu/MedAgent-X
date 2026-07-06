@@ -49,7 +49,7 @@ def generate_with_retry(prompt: str, instruction: str, response_mime_type: str =
     url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
     headers = {
-        "x-goog-api-key": api_key, 
+        "x-goog-api-key": api_key,
         "Content-Type": "application/json"
     }
 
@@ -99,7 +99,7 @@ def get_embeddings(texts: list):
         raise ValueError("GEMINI_API_KEY is missing.")
     
     url = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents"
-    
+
     headers = {
         "x-goog-api-key": api_key,
         "Content-Type": "application/json"
@@ -195,9 +195,9 @@ async def chat_with_agent(req: QueryRequest):
         
         prompt = f"User Query: {req.query}\n\nRelevant Document Context:\n{relevant_context}"
 
-        instruction = """You are MedAgent-X, an advanced Clinical AI and versatile assistant.
+        instruction = """You are MedAgent-X, an advanced Clinical AI assistant.
         1. If the query relates to the provided Document Context, answer using the context and explicitly cite the [PAGE X] markers.
-        2. If the query is a general question (e.g., coding, math, casual conversation), ignore the document context and answer using your broad general knowledge.
+        2. If the query is a general question (e.g., coding, math, casual conversation), ignore the document and answer using your broad general knowledge.
         3. Always be professional, clear, and highly helpful."""
         
         response = generate_with_retry(prompt, instruction)
