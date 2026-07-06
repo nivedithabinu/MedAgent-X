@@ -5,6 +5,7 @@ import time
 import uuid
 import numpy as np
 import requests
+import traceback
 
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,13 +43,6 @@ class AIResponse:
     def __init__(self, text):
         self.text = text
 
-def check_api_key():
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY is missing. Please set it in Render Dashboard.")
-
-    if not api_key.startswith("AIza"):
-        raise ValueError(f"INVALID API KEY: Your key starts with '{api_key[:4]}...'. Google AI Studio keys MUST start with 'AIza'.")
-
 def generate_with_retry(prompt: str, instruction: str, response_mime_type: str = "text/plain"):
     if not api_key:
         raise ValueError("GEMINI_API_KEY is missing. Please set it in Render Dashboard.")
@@ -56,22 +50,18 @@ def generate_with_retry(prompt: str, instruction: str, response_mime_type: str =
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
 
     headers = {
-        "x-goog-api-key": api_key,
         "Content-Type": "application/json"
     }
 
     payload = {
         "systemInstruction": {"parts": [{"text": instruction}]},
-
         "contents": [{"parts": [{"text": prompt}]}],
-
         "safetySettings": [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
         ],
-
         "generationConfig": {
             "temperature": 0.2,
             "responseMimeType": response_mime_type
@@ -91,21 +81,18 @@ def generate_with_retry(prompt: str, instruction: str, response_mime_type: str =
             res.raise_for_status()
             data = res.json()
             
-            # Extract text safely
             text_content = data["candidates"][0]["content"]["parts"][0]["text"]
             return AIResponse(text_content)
             
         except Exception as e:
             error_msg = res.text if 'res' in locals() and hasattr(res, 'text') else str(e)
-    
             if attempt == 1:
-                print(f"❌ Gemini API Error: {error_msg}")
                 raise Exception(f"Gemini API Error: {error_msg}")
 
 def get_embeddings(texts: list):
     if not api_key:
         raise ValueError("GEMINI_API_KEY is missing.")
-    
+
     url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents?key={api_key}"
 
     headers = {
@@ -116,7 +103,7 @@ def get_embeddings(texts: list):
         {
             "model": "models/text-embedding-004",
             "content": {"parts": [{"text": t}]}
-        } 
+        }
         
         for t in texts
     ]
@@ -297,8 +284,13 @@ async def export_ppt(req: DocRequest):
         prs.save(ppt_stream)
         ppt_stream.seek(0)
 
-        media_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-        headers = {"Content-Disposition": f"attachment; filename=MedAgent_Export.pptx"}
+        return StreamingResponse(
+            ppt_stream,
+            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            headers={
+                "Content-Disposition": f"attachment; filename=MedAgent_Export.pptx"
+            }
+        )
         
     except Exception as e:
         traceback.print_exc()
