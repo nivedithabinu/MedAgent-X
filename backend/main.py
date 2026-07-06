@@ -221,22 +221,25 @@ async def export_ppt(req: DocRequest):
 
         for slide_data in slides_data:
             slide = prs.slides.add_slide(prs.slide_layouts[1]) 
-            title_shape = slide.shapes.title
-            
-            if title_shape:
-                title_shape.text = slide_data.get("title", "Slide")
+
+            if slide.shapes.title:
+                slide.shapes.title.text = slide_data.get("title", "Slide")
+
+            if len(slide.shapes.placeholders) > 1:
+                body_shape = slide.shapes.placeholders[1]
+                t = body_shape.text_frame
+                bullets = slide_data.get("bullets", [])
                 
-            body_shape = slide.shapes.placeholders[1]
-            t = body_shape.text_frame
-            bullets = slide_data.get("bullets", [])
-            
-            if bullets:
-                t.text = bullets[0]
-                
-                for bullet in bullets[1:]:
-                    p = t.add_paragraph()
-                    p.text = bullet
-                    p.level = 0
+                if bullets:
+                    t.clear() 
+
+                    for bullet in bullets:
+                        p = t.add_paragraph()
+                        p.text = str(bullet)
+                        p.level = 0
+                        
+            else:
+                print(f"Warning: Slide layout does not support content for title: {slide_data.get('title')}")
                         
         ppt_stream = io.BytesIO()
         prs.save(ppt_stream)
