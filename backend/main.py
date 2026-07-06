@@ -45,8 +45,8 @@ class AIResponse:
 def generate_with_retry(prompt: str, instruction: str, response_mime_type: str = "text/plain"):
     if not api_key:
         raise ValueError("GEMINI_API_KEY is missing. Please set it in Render Dashboard.")
-    
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
 
     headers = {
         "x-goog-api-key": api_key,
@@ -98,7 +98,7 @@ def get_embeddings(texts: list):
     if not api_key:
         raise ValueError("GEMINI_API_KEY is missing.")
     
-    url = "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents?key={api_key}"
 
     headers = {
         "x-goog-api-key": api_key,
@@ -264,8 +264,8 @@ async def export_ppt(req: DocRequest):
         if req.doc_id not in vector_db or not vector_db[req.doc_id].get("ppt"):
             raise HTTPException(status_code=404, detail="Please generate the PPT in the UI first.")
             
-            slides_data = vector_db[req.doc_id]["ppt"]
-            prs = Presentation()
+        slides_data = vector_db[req.doc_id]["ppt"]
+        prs = Presentation()
 
         for slide_data in slides_data:
             slide = prs.slides.add_slide(prs.slide_layouts[1]) 
@@ -274,18 +274,18 @@ async def export_ppt(req: DocRequest):
             if title_shape:
                 title_shape.text = slide_data.get("title", "Slide")
                 
-                body_shape = slide.shapes.placeholders[1]
-                t = body_shape.text_frame
-                bullets = slide_data.get("bullets", [])
+            body_shape = slide.shapes.placeholders[1]
+            t = body_shape.text_frame
+            bullets = slide_data.get("bullets", [])
                 
-                if bullets:
-                    t.text = bullets[0]
+            if bullets:
+                t.text = bullets[0]
                     
-                    for bullet in bullets[1:]:
-                        p = t.add_paragraph()
-                        p.text = bullet
-                        p.level = 0
-                        
+                for bullet in bullets[1:]:
+                    p = t.add_paragraph()
+                    p.text = bullet
+                    p.level = 0
+
         ppt_stream = io.BytesIO()
         prs.save(ppt_stream)
         ppt_stream.seek(0)
