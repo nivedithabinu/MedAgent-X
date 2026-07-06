@@ -42,6 +42,13 @@ class AIResponse:
     def __init__(self, text):
         self.text = text
 
+def check_api_key():
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is missing. Please set it in Render Dashboard.")
+
+    if not api_key.startswith("AIza"):
+        raise ValueError(f"INVALID API KEY: Your key starts with '{api_key[:4]}...'. Google AI Studio keys MUST start with 'AIza'.")
+
 def generate_with_retry(prompt: str, instruction: str, response_mime_type: str = "text/plain"):
     if not api_key:
         raise ValueError("GEMINI_API_KEY is missing. Please set it in Render Dashboard.")
@@ -92,6 +99,7 @@ def generate_with_retry(prompt: str, instruction: str, response_mime_type: str =
             error_msg = res.text if 'res' in locals() and hasattr(res, 'text') else str(e)
     
             if attempt == 1:
+                print(f"❌ Gemini API Error: {error_msg}")
                 raise Exception(f"Gemini API Error: {error_msg}")
 
 def get_embeddings(texts: list):
@@ -101,7 +109,6 @@ def get_embeddings(texts: list):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents?key={api_key}"
 
     headers = {
-        "x-goog-api-key": api_key,
         "Content-Type": "application/json"
     }
 
@@ -277,26 +284,21 @@ async def export_ppt(req: DocRequest):
             body_shape = slide.shapes.placeholders[1]
             t = body_shape.text_frame
             bullets = slide_data.get("bullets", [])
-                
+            
             if bullets:
                 t.text = bullets[0]
-                    
+                
                 for bullet in bullets[1:]:
                     p = t.add_paragraph()
                     p.text = bullet
                     p.level = 0
-
+                        
         ppt_stream = io.BytesIO()
         prs.save(ppt_stream)
         ppt_stream.seek(0)
 
-        return StreamingResponse(
-            ppt_stream,
-            media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            headers={
-                "Content-Disposition": f"attachment; filename=MedAgent_Export.pptx"
-            }
-        )
+        media_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+        headers = {"Content-Disposition": f"attachment; filename=MedAgent_Export.pptx"}
         
     except Exception as e:
         traceback.print_exc()
