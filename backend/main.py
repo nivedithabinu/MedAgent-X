@@ -44,17 +44,8 @@ class AIResponse:
         self.text = text
 
 def generate_with_retry(prompt: str, instruction: str, response_mime_type: str = "text/plain"):
-    if not api_key:
-        return AIResponse("AI Response (Mocked): This is a demonstration of the MedAgent-X processing capability.")
-        
-    try:
-        response = requests.post(url, json={...})
-        response.raise_for_status()
-        return AIResponse(response.json()['candidates'][0]['content']['parts'][0]['text'])
-        
-    except Exception as e:
-        print(f"API Failed: {e}. Falling back to mock.")
-        return AIResponse("MedAgent-X processed your request successfully. (AI engine currently in demo mode).")
+    i = instruction.replace("medical research", "clinical patient case analysis")
+    forced = f"Role: Medical Assistant. Context: Analyzing a Clinical Patient Case. Content: {prompt}"
 
 def get_embeddings(texts: list):
     if not api_key:
