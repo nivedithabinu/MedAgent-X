@@ -89,27 +89,21 @@ def generate_with_retry(prompt: str, instruction: str, response_mime_type: str =
                 error_msg = res.text if 'res' in locals() and hasattr(res, 'text') else str(e)
                 raise Exception(f"Gemini API Error: {error_msg}")
 
-def get_embeddings(texts: list):
-    if not api_key:
-        raise ValueError("Invalid GEMINI_API_KEY.")
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents?key={api_key}"
-    headers = {"Content-Type": "application/json"}
-
-    valid_texts = [t.strip() for t in texts if t and t.strip()]
-
-    if not valid_texts:
-        return []
-
-    requests_list = [{"model": "models/text-embedding-004", "content": {"parts": [{"text": t}]}} for t in valid_texts]
+def get_embeddings(text: str):
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={api_key}"
     
-    res = requests.post(url, json={"requests": requests_list}, headers=headers)
-
-    if not res.ok:
-        raise Exception(f"Embedding API Error: {res.text}")
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "model": "models/text-embedding-004",
+        "content": {"parts": [{"text": text}]}
+    }
+    
+    response = requests.post(url, headers=headers, json=payload)
+    
+    if response.status_code != 200:
+        raise Exception(f"Embedding API Error: {response.text}")
         
-    data = res.json()
-    return [np.array(emb["values"]) for emb in data.get("embeddings", [])]
+    return response.json()["embedding"]["values"]
 
 @app.get("/")
 def read_root():
