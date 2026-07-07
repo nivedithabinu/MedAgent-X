@@ -2,7 +2,7 @@
 
 > **An Agentic AI Research Assistant powered by Retrieval-Augmented Generation (RAG)**
 
-MedAgent-X is a full-stack AI application designed to accelerate clinical research. Instead of manually navigating hundreds of pages, researchers can upload a clinical PDF, ask questions in natural language, generate knowledge graphs, and export AI-generated presentation slides—all within seconds.
+MedAgent-X is a full-stack AI application designed to accelerate clinical research. Instead of manually navigating hundreds of pages, researchers can upload a clinical PDF, ask questions in the chatbot, generate knowledge graphs, and export AI-generated presentation slides.
 
 ---
 
