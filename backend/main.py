@@ -106,9 +106,8 @@ def get_embeddings(text: str):
     response = requests.post(url, headers=headers, json=payload)
 
     if response.status_code != 200:
-        error_data = response.json()
-        raise Exception(f"Embedding API Error: {json.dumps(error_data)}")
-
+        raise Exception(f"Embedding API Error: {response.status_code} - {response.text}")
+        
     return response.json()["embedding"]["values"]
 
 @app.get("/")
