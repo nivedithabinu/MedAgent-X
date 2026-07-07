@@ -90,19 +90,25 @@ def generate_with_retry(prompt: str, instruction: str, response_mime_type: str =
                 raise Exception(f"Gemini API Error: {error_msg}")
 
 def get_embeddings(text: str):
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is missing.")
+
     url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={api_key}"
-    
     headers = {"Content-Type": "application/json"}
+
     payload = {
         "model": "models/text-embedding-004",
-        "content": {"parts": [{"text": text}]}
+        "content": {
+            "parts": [{"text": text}]
+        }
     }
     
     response = requests.post(url, headers=headers, json=payload)
-    
+
     if response.status_code != 200:
-        raise Exception(f"Embedding API Error: {response.text}")
-        
+        error_data = response.json()
+        raise Exception(f"Embedding API Error: {json.dumps(error_data)}")
+
     return response.json()["embedding"]["values"]
 
 @app.get("/")
