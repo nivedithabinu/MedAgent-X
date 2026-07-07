@@ -81,7 +81,6 @@ This predictable schema is directly mapped into PowerPoint templates using **pyt
 
 - Python
 - FastAPI
-- Uvicorn
 - NumPy
 - PyPDF
 - python-pptx
