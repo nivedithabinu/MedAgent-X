@@ -58,8 +58,6 @@ This predictable schema is directly mapped into PowerPoint templates using **pyt
 
 ## ⚙ Stateless Backend Design
 
-The application follows a decoupled client-server architecture.
-
 - Frontend hosted on **Vercel**
 - Backend deployed on **Render**
 - Communication exclusively through REST APIs
@@ -105,6 +103,3 @@ The application follows a decoupled client-server architecture.
 - Render (Backend)
 
 ---
-# 📜 License
-
-This project is intended for educational, research, and demonstration purposes.
