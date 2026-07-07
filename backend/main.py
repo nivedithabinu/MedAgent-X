@@ -44,8 +44,60 @@ class AIResponse:
         self.text = text
 
 def generate_with_retry(prompt: str, instruction: str, response_mime_type: str = "text/plain"):
-    i = instruction.replace("medical research", "clinical patient case analysis")
-    forced = f"Role: Medical Assistant. Context: Analyzing a Clinical Patient Case. Content: {prompt}"
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is missing. Please set it in Render Dashboard.")
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+
+    headers = {
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "systemInstruction": {"parts": [{"text": instruction}]},
+        "contents": [{"parts": [{"text": prompt}]}],
+        "safetySettings": [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
+        ],
+        "generationConfig": {
+            "temperature": 0.2,
+            "responseMimeType": response_mime_type
+        }
+    }
+    
+    for attempt in range(2):
+        try:
+            res = requests.post(url, json=payload, headers=headers)
+            
+            if res.status_code == 429:
+                if attempt == 0:
+                    print("⚠️ Quota Hit! Pausing for 15s...")
+                    time.sleep(15)
+                    continue
+            
+            res.raise_for_status()
+            data = res.json()
+            
+            candidates = data.get("candidates", [])
+            if not candidates:
+                return AIResponse("Analysis unavailable due to content filtering or empty response.")
+                
+            content = candidates[0].get("content", {})
+            parts = content.get("parts", [])
+            
+            if not parts:
+                return AIResponse("No text output returned.")
+                
+            text_content = parts[0].get("text", "")
+            return AIResponse(text_content)
+            
+        except Exception as e:
+            error_msg = res.text if 'res' in locals() and hasattr(res, 'text') else str(e)
+            if attempt == 1:
+                raise Exception(f"Gemini API Error: {error_msg}")
 
 def get_embeddings(texts: list):
     if not api_key:
@@ -57,13 +109,16 @@ def get_embeddings(texts: list):
         "Content-Type": "application/json"
     }
 
+    valid_texts = [t.strip() for t in texts if t and t.strip()]
+    if not valid_texts:
+        return []
+
     requests_list = [
         {
             "model": "models/text-embedding-004",
             "content": {"parts": [{"text": t}]}
         }
-        
-        for t in texts
+        for t in valid_texts
     ]
     
     res = requests.post(url, json={"requests": requests_list}, headers=headers)
@@ -92,22 +147,34 @@ async def upload_pdf(file: UploadFile = File(...)):
         full_text = ""
 
         for i, page in enumerate(pdf.pages): 
-            text = page.extract_text()
-            if text:
-                full_text = full_text + f"\n--- [PAGE {i+1}] ---\n{text.strip()}\n"
+            try:
+                text = page.extract_text()
+                if text:
+                    full_text = full_text + f"\n--- [PAGE {i+1}] ---\n{text.strip()}\n"
+            except Exception as e:
+                print(f"Skipping page {i+1} due to extraction error: {e}")
+                continue
                 
-        if not full_text:
+        if not full_text.strip():
             raise HTTPException(status_code=400, detail="Could not extract text from PDF.")
 
         first_page = full_text[:1000]
         prompt = f"Analyze this text snippet: \"{first_page}\". Is this highly likely related to Medical, Health, or Biological sciences? Reply with exactly YES or NO."
-        response = generate_with_retry(prompt, "You are a strict medical classifier.")
         
-        if "YES" not in response.text.strip().upper():
+        try:
+            response = generate_with_retry(prompt, "You are a strict medical classifier.")
+            response_text = response.text if response and hasattr(response, 'text') else "YES"
+        except Exception as e:
+            print(f"AI Classification bypassed due to error: {e}")
+            response_text = "YES" 
+        
+        if "YES" not in response_text.strip().upper():
             raise HTTPException(status_code=403, detail="Document rejected: Content is not medical research.")
 
         chunk_size = 1500
         chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)][:60]
+        
+        chunks = [c.strip() for c in chunks if c and c.strip()]
 
         embeddings = get_embeddings(chunks)
 
@@ -222,8 +289,9 @@ async def export_ppt(req: DocRequest):
         for slide_data in slides_data:
             slide = prs.slides.add_slide(prs.slide_layouts[1]) 
 
-            if slide.shapes.title:
-                slide.shapes.title.text = slide_data.get("title", "Slide")
+            title_shape = slide.shapes.title
+            if title_shape:
+                title_shape.text = slide_data.get("title", "Slide")
 
             if len(slide.shapes.placeholders) > 1:
                 body_shape = slide.shapes.placeholders[1]
@@ -231,15 +299,14 @@ async def export_ppt(req: DocRequest):
                 bullets = slide_data.get("bullets", [])
                 
                 if bullets:
-                    t.clear() 
-
+                    t.clear()
+                    
                     for bullet in bullets:
                         p = t.add_paragraph()
                         p.text = str(bullet)
                         p.level = 0
-                        
             else:
-                print(f"Warning: Slide layout does not support content for title: {slide_data.get('title')}")
+                print(f"Warning: Layout for slide '{slide_data.get('title')}' is missing a content placeholder.")
                         
         ppt_stream = io.BytesIO()
         prs.save(ppt_stream)
