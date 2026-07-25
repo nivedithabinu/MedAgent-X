@@ -91,35 +91,47 @@ def generate_with_retry(prompt: str, instruction: str, response_mime_type: str =
                 error_msg = res.text if 'res' in locals() and hasattr(res, 'text') else str(e)
                 raise Exception(f"Gemini API Error: {error_msg}")
 
-def get_embeddings(text: str):
+def get_embeddings_batch(texts: list):
     if not api_key:
         raise ValueError("GEMINI_API_KEY is missing.")
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents?key={api_key}"
     headers = {"Content-Type": "application/json"}
 
-    payload = {
-        "model": "models/text-embedding-004",
-        "content": {
-            "parts": [{"text": text}]
+    valid_texts = [t.strip() for t in texts if t and t.strip()]
+
+    if not valid_texts:
+        return []
+
+    requests_list = [
+        {
+            "model": "models/text-embedding-004",
+            "content": {"parts": [{"text": t}]}
         }
-    }
+        for t in valid_texts
+    ]
     
-    response = requests.post(url, headers=headers, json=payload)
+    response = requests.post(url, headers=headers, json={"requests": requests_list})
 
-    if response.status_code != 200:
+    if not response.ok:
+        error_msg = response.text
         try:
-            error_data = response.json()
-            raise Exception(f"Embedding API Error: {json.dumps(error_data)}")
-    
-        except ValueError:
-            raise Exception(f"Embedding API Error: {response.text}")
+            error_msg = response.json().get("error", {}).get("message", response.text)
 
-    return response.json()["embedding"]["values"]
+        except:
+            pass
+
+        raise Exception(f"Embedding Failed: {error_msg}")
+
+    data = response.json()
+    return [np.array(emb["values"]) for emb in data.get("embeddings", [])]
 
 @app.get("/")
 def read_root():
-    return {"status": "MedAgent-X Enterprise Backend Online", "version": "1.0.0"}
+    return {
+        "status": "MedAgent-X Enterprise Backend Online",
+        "version": "1.0.0"
+    }
 
 @app.post("/api/upload")
 async def upload_pdf(file: UploadFile = File(...)):
@@ -165,25 +177,19 @@ async def upload_pdf(file: UploadFile = File(...)):
         chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)][:60]
         chunks = [c.strip() for c in chunks if c and c.strip()]
 
-        # Generate Vector Embeddings (Iterating over chunks)
-        embeddings = []
-        for i in chunks:
-            try:
-                embed = get_embeddings(i)
-                embeddings.append(embed)
-    
-            except Exception as e:
-                print(f"Warning: Skipping embedding for a chunk due to error: {e}")
-                continue
-    
+        try:
+            embeddings = get_embeddings_batch(chunks)
+
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
         if not embeddings:
-            raise HTTPException(status_code=500, detail="Failed to generate embeddings for this document.")
+            raise HTTPException(status_code=500, detail="Failed to generate embeddings: No valid data returned.")
 
         doc_id = str(uuid.uuid4())
 
-        # In-Memory Vector Store
         vector_db[doc_id] = {
-            "chunks": chunks[:len(embeddings)], # Align chunks with successful embeddings
+            "chunks": chunks,
             "embeddings": embeddings,
             "full_text": full_text[:25000],
             "ppt": None,
@@ -195,6 +201,9 @@ async def upload_pdf(file: UploadFile = File(...)):
             "filename": file.filename, 
             "pages_count": len(pdf.pages)
         }
+
+    except HTTPException as e:
+        raise e
 
     except Exception as e:
         traceback.print_exc()
