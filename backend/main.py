@@ -45,7 +45,7 @@ class AIResponse:
 
 def generate_with_retry(prompt: str, instruction: str, response_mime_type: str = "text/plain"):
     if not api_key:
-        raise ValueError("Invalid or missing GEMINI_API_KEY.")
+        raise ValueError("Invalid or missing GEMINI_API_KEY. Please ensure it is set in your environment variables.")
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
@@ -70,17 +70,19 @@ def generate_with_retry(prompt: str, instruction: str, response_mime_type: str =
             res = requests.post(url, json=payload, headers=headers)
             
             if res.status_code == 429:
-                time.sleep(10 * (attempt + 1))
+                time.sleep(5 * (attempt + 1))
                 continue
             
             res.raise_for_status()
             data = res.json()
-
+            
             candidates = data.get("candidates", [])
             if not candidates:
-                return AIResponse("Analysis unavailable due to content filtering or empty response.")
+                return AIResponse("Analysis unavailable due to content filtering or empty response from API.")
                 
             text_content = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+            if not text_content:
+                 return AIResponse("No text content returned from the API.")
 
             return AIResponse(text_content)
             
@@ -106,8 +108,13 @@ def get_embeddings(text: str):
     response = requests.post(url, headers=headers, json=payload)
 
     if response.status_code != 200:
-        raise Exception(f"Embedding API Error: {response.status_code} - {response.text}")
-        
+        try:
+            error_data = response.json()
+            raise Exception(f"Embedding API Error: {json.dumps(error_data)}")
+    
+        except ValueError:
+            raise Exception(f"Embedding API Error: {response.text}")
+
     return response.json()["embedding"]["values"]
 
 @app.get("/")
@@ -124,13 +131,12 @@ async def upload_pdf(file: UploadFile = File(...)):
         pdf = PdfReader(io.BytesIO(content))
         full_text = ""
 
-        # PDF Extraction
+        # Defensive PDF Extraction
         for i, page in enumerate(pdf.pages): 
             try:
                 text = page.extract_text()
-
                 if text:
-                    full_text += f"\n--- [PAGE {i+1}] ---\n{text.strip()}\n"
+                    full_text = full_text + f"\n--- [PAGE {i+1}] ---\n{text.strip()}\n"
 
             except Exception as e:
                 print(f"Skipping page {i+1} due to extraction error: {e}")
@@ -139,7 +145,7 @@ async def upload_pdf(file: UploadFile = File(...)):
         if not full_text.strip():
             raise HTTPException(status_code=400, detail="Could not extract text from PDF.")
 
-        # Verification Step
+        # Agentic Verification Step
         first_page = full_text[:1000]
         prompt = f"Analyze this text snippet: \"{first_page}\". Is this highly likely related to Medical, Health, or Biological sciences? Reply with exactly YES or NO."
         
@@ -147,24 +153,37 @@ async def upload_pdf(file: UploadFile = File(...)):
             response = generate_with_retry(prompt, "You are a strict medical classifier.")
             response_text = response.text if response else "YES"
 
-        except Exception:
+        except Exception as e:
+            print(f"Warning: Classification failed ({e}), proceeding anyway.")
             response_text = "YES"
         
         if "YES" not in response_text.strip().upper():
-            raise HTTPException(status_code=403, detail="Document rejected: Content is not medical research.")
+            raise HTTPException(status_code=403, detail="Document rejected: Content does not appear to be medical research.")
 
-        # Semantic Chunkings
+        # Semantic Chunking
         chunk_size = 1500
         chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)][:60]
         chunks = [c.strip() for c in chunks if c and c.strip()]
 
-        # Generate Vector Embeddings
-        embeddings = get_embeddings(chunks)
+        # Generate Vector Embeddings (Iterating over chunks)
+        embeddings = []
+        for i in chunks:
+            try:
+                embed = get_embeddings(i)
+                embeddings.append(embed)
+    
+            except Exception as e:
+                print(f"Warning: Skipping embedding for a chunk due to error: {e}")
+                continue
+    
+        if not embeddings:
+            raise HTTPException(status_code=500, detail="Failed to generate embeddings for this document.")
+
         doc_id = str(uuid.uuid4())
 
         # In-Memory Vector Store
         vector_db[doc_id] = {
-            "chunks": chunks,
+            "chunks": chunks[:len(embeddings)], # Align chunks with successful embeddings
             "embeddings": embeddings,
             "full_text": full_text[:25000],
             "ppt": None,
@@ -179,8 +198,7 @@ async def upload_pdf(file: UploadFile = File(...)):
 
     except Exception as e:
         traceback.print_exc()
-
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @app.post("/api/chat")
 async def chat_with_agent(req: QueryRequest):
@@ -190,9 +208,16 @@ async def chat_with_agent(req: QueryRequest):
     doc_data = vector_db[req.doc_id]
     
     try:
-        query_emb = get_embeddings([req.query])[0]
-        similarities = [np.dot(query_emb, doc_emb) / (np.linalg.norm(query_emb) * np.linalg.norm(doc_emb)) for doc_emb in doc_data["embeddings"]]
+        # Custom Vector Search (Cosine Similarity)
+        query_emb = get_embeddings(req.query)
         
+        # Ensure correct shapes for numpy
+        query_emb_np = np.array(query_emb)
+        doc_embs_np = np.array(doc_data["embeddings"])
+        
+        similarities = [np.dot(query_emb_np, doc_emb) / (np.linalg.norm(query_emb_np) * np.linalg.norm(doc_emb)) for doc_emb in doc_embs_np]
+        
+        # Retrieve top 4 most relevant chunks
         top_indices = np.argsort(similarities)[-4:][::-1]
         relevant_context = "\n\n...\n\n".join([doc_data["chunks"][i] for i in top_indices])
         
@@ -204,12 +229,13 @@ async def chat_with_agent(req: QueryRequest):
         
         response = generate_with_retry(prompt, instruction)
 
-        return {"reply": response.text}
+        return {
+            "reply": response.text
+        }
 
     except Exception as e:
         traceback.print_exc()
-
-        raise HTTPException(status_code=500, detail="Chat engine encountered an error.")
+        raise HTTPException(status_code=500, detail=f"Chat engine encountered an error: {str(e)}")
 
 @app.post("/api/generate-graph")
 async def generate_graph(req: DocRequest):
@@ -218,7 +244,9 @@ async def generate_graph(req: DocRequest):
             raise HTTPException(status_code=404, detail="Document not found.")
         
         if vector_db[req.doc_id]["graph"]:
-            return {"mermaid_code": vector_db[req.doc_id]["graph"]}
+            return {
+                "mermaid_code": vector_db[req.doc_id]["graph"]
+            }
 
         prompt = f"Analyze this medical text and create a Mermaid.js mindmap showing core disease, symptoms, treatments. Start with 'mindmap' on line 1. Keep nodes short. Text: {vector_db[req.doc_id]['full_text'][:15000]}"
         response = generate_with_retry(prompt, "Output ONLY valid mermaid mindmap code. No markdown blocks.")
@@ -226,7 +254,9 @@ async def generate_graph(req: DocRequest):
         mermaid_code = response.text.replace("```mermaid", "").replace("```", "").strip()
         vector_db[req.doc_id]["graph"] = mermaid_code
 
-        return {"mermaid_code": mermaid_code}
+        return {
+            "mermaid_code": mermaid_code
+        }
 
     except Exception as e:
         traceback.print_exc()
@@ -239,7 +269,9 @@ async def generate_ppt(req: DocRequest):
             raise HTTPException(status_code=404, detail="Document not found.")
 
         if vector_db[req.doc_id]["ppt"]:
-            return {"slides": vector_db[req.doc_id]["ppt"]}
+            return {
+                "slides": vector_db[req.doc_id]["ppt"]
+            }
 
         prompt = f"Create a 5 slide presentation summarizing core findings. Schema: [{{ 'title': 'Title', 'bullets': ['pt1', 'pt2'], 'icon': 'ph-pill' }}]. Text: {vector_db[req.doc_id]['full_text'][:15000]}"
         response = generate_with_retry(prompt, "Output strictly a JSON array.", "application/json")
@@ -247,12 +279,13 @@ async def generate_ppt(req: DocRequest):
         clean_text = response.text.replace("```json", "").replace("```", "").strip()
         slides = json.loads(clean_text)
         vector_db[req.doc_id]["ppt"] = slides
-
-        return {"slides": slides}
+    
+        return {
+            "slides": slides
+        }
 
     except Exception as e:
         traceback.print_exc()
-
         raise HTTPException(status_code=500, detail="PPT Generation Failed")
 
 @app.post("/api/export-ppt")
@@ -271,6 +304,7 @@ async def export_ppt(req: DocRequest):
             if title_shape:
                 title_shape.text = slide_data.get("title", "Slide")
 
+            # Defensive Placeholder checking
             if len(slide.shapes.placeholders) > 1:
                 body_shape = slide.shapes.placeholders[1]
                 t = body_shape.text_frame
