@@ -36,9 +36,6 @@ class DocRequest(BaseModel):
 
 vector_db = {}
 
-api_key = os.getenv("GEMINI_API_KEY", "")
-api_key = api_key.replace('"', '').replace("'", "").replace("Bearer ", "").strip()
-
 class AIResponse:
     def __init__(self, text):
         self.text = text
@@ -46,12 +43,14 @@ class AIResponse:
 def get_clean_key():
     raw_key = os.getenv("GEMINI_API_KEY", "")
     clean_key = raw_key.replace('"', '').replace("'", "").replace("Bearer ", "").strip()
+    
+    if not clean_key:
+        raise ValueError("GEMINI_API_KEY is missing or invalid.")
+    
     return clean_key
 
 def generate_with_retry(prompt: str, instruction: str, response_mime_type: str = "text/plain"):
     api_key = get_clean_key()
-    if not api_key:
-        raise ValueError("Invalid or missing GEMINI_API_KEY. Please ensure it is set in your environment variables.")
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
@@ -94,12 +93,12 @@ def generate_with_retry(prompt: str, instruction: str, response_mime_type: str =
             
         except Exception as e:
             if attempt == 2:
+                masked_key = f"{api_key[:4]}...{api_key[-4:]}" if api_key else "NONE"
                 error_msg = res.text if 'res' in locals() and hasattr(res, 'text') else str(e)
-                raise Exception(f"Gemini API Error: {error_msg}")
+                raise Exception(f"[Key used: {masked_key}] Gemini API Error: {error_msg}")
 
 def get_embeddings_batch(texts: list):
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY is missing.")
+    api_key = get_clean_key()
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents?key={api_key}"
     headers = {"Content-Type": "application/json"}
@@ -120,14 +119,8 @@ def get_embeddings_batch(texts: list):
     response = requests.post(url, headers=headers, json={"requests": requests_list})
 
     if not response.ok:
-        error_msg = response.text
-        try:
-            error_msg = response.json().get("error", {}).get("message", response.text)
-
-        except:
-            pass
-
-        raise Exception(f"Embedding Failed: {error_msg}")
+        masked_key = f"{api_key[:4]}...{api_key[-4:]}"
+        raise Exception(f"[Key used: {masked_key}] Embedding API Error: {response.text}")
 
     data = response.json()
     return [np.array(emb["values"]) for emb in data.get("embeddings", [])]
