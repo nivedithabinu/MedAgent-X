@@ -46,7 +46,7 @@ def get_clean_key():
     
     if not clean_key:
         raise ValueError("GEMINI_API_KEY is missing or invalid.")
-    
+
     return clean_key
 
 def generate_with_retry(prompt: str, instruction: str, response_mime_type: str = "text/plain"):
@@ -64,10 +64,8 @@ def generate_with_retry(prompt: str, instruction: str, response_mime_type: str =
             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
         ],
-        "generationConfig": {
-            "temperature": 0.2,
-            "responseMimeType": response_mime_type
-        }
+
+        "generationConfig": {"temperature": 0.2, "responseMimeType": response_mime_type}
     }
     
     for attempt in range(3):
@@ -97,33 +95,25 @@ def generate_with_retry(prompt: str, instruction: str, response_mime_type: str =
                 error_msg = res.text if 'res' in locals() and hasattr(res, 'text') else str(e)
                 raise Exception(f"[Key used: {masked_key}] Gemini API Error: {error_msg}")
 
-def get_embeddings_batch(texts: list):
+def get_embeddings(text: str):
+    """Fetches a single embedding. We use this in a loop to avoid the deprecated batch endpoint."""
     api_key = get_clean_key()
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:batchEmbedContents?key={api_key}"
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={api_key}"
     headers = {"Content-Type": "application/json"}
 
-    valid_texts = [t.strip() for t in texts if t and t.strip()]
-
-    if not valid_texts:
-        return []
-
-    requests_list = [
-        {
-            "model": "models/text-embedding-004",
-            "content": {"parts": [{"text": t}]}
-        }
-        for t in valid_texts
-    ]
+    payload = {
+        "model": "models/text-embedding-004",
+        "content": {"parts": [{"text": text.strip()}]}
+    }
     
-    response = requests.post(url, headers=headers, json={"requests": requests_list})
+    response = requests.post(url, headers=headers, json=payload)
 
     if not response.ok:
         masked_key = f"{api_key[:4]}...{api_key[-4:]}"
         raise Exception(f"[Key used: {masked_key}] Embedding API Error: {response.text}")
 
-    data = response.json()
-    return [np.array(emb["values"]) for emb in data.get("embeddings", [])]
+    return response.json()["embedding"]["values"]
 
 @app.get("/")
 def read_root():
@@ -152,7 +142,7 @@ async def upload_pdf(file: UploadFile = File(...)):
             except Exception as e:
                 print(f"Skipping page {i+1} due to extraction error: {e}")
                 continue
-                
+
         if not full_text.strip():
             raise HTTPException(status_code=400, detail="Could not extract text from PDF.")
 
@@ -171,15 +161,15 @@ async def upload_pdf(file: UploadFile = File(...)):
         if "YES" not in response_text.strip().upper():
             raise HTTPException(status_code=403, detail="Document rejected: Content does not appear to be medical research.")
 
-        # Semantic Chunking
         chunk_size = 1500
         chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)][:20]
         chunks = [c.strip() for c in chunks if c and c.strip()]
 
         try:
             embeddings = []
+
             for i in chunks:
-                e = get_embeddings_batch(i)
+                e = get_embeddings(i)
                 embeddings.append(np.array(e))
                 time.sleep(0.5)
         
@@ -222,14 +212,10 @@ async def chat_with_agent(req: QueryRequest):
     try:
         # Custom Vector Search (Cosine Similarity)
         query_emb = get_embeddings(req.query)
-        
-        # Ensure correct shapes for numpy
         query_emb_np = np.array(query_emb)
         doc_embs_np = np.array(doc_data["embeddings"])
         
         similarities = [np.dot(query_emb_np, doc_emb) / (np.linalg.norm(query_emb_np) * np.linalg.norm(doc_emb)) for doc_emb in doc_embs_np]
-        
-        # Retrieve top 4 most relevant chunks
         top_indices = np.argsort(similarities)[-4:][::-1]
         relevant_context = "\n\n...\n\n".join([doc_data["chunks"][i] for i in top_indices])
         
@@ -311,8 +297,8 @@ async def export_ppt(req: DocRequest):
 
         for slide_data in slides_data:
             slide = prs.slides.add_slide(prs.slide_layouts[1]) 
-
             title_shape = slide.shapes.title
+    
             if title_shape:
                 title_shape.text = slide_data.get("title", "Slide")
 
