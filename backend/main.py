@@ -173,12 +173,16 @@ async def upload_pdf(file: UploadFile = File(...)):
 
         # Semantic Chunking
         chunk_size = 1500
-        chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)][:60]
+        chunks = [full_text[i:i+chunk_size] for i in range(0, len(full_text), chunk_size)][:20]
         chunks = [c.strip() for c in chunks if c and c.strip()]
 
         try:
-            embeddings = get_embeddings_batch(chunks)
-
+            embeddings = []
+            for i in chunks:
+                e = get_embeddings_batch(i)
+                embeddings.append(np.array(e))
+                time.sleep(0.5)
+        
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e))
 
