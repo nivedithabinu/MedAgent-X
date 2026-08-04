@@ -43,7 +43,13 @@ class AIResponse:
     def __init__(self, text):
         self.text = text
 
+def get_clean_key():
+    raw_key = os.getenv("GEMINI_API_KEY", "")
+    clean_key = raw_key.replace('"', '').replace("'", "").replace("Bearer ", "").strip()
+    return clean_key
+
 def generate_with_retry(prompt: str, instruction: str, response_mime_type: str = "text/plain"):
+    api_key = get_clean_key()
     if not api_key:
         raise ValueError("Invalid or missing GEMINI_API_KEY. Please ensure it is set in your environment variables.")
 
