@@ -7,6 +7,7 @@ import numpy as np
 import requests
 import traceback
 
+from google import genai
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -96,24 +97,14 @@ def generate_with_retry(prompt: str, instruction: str, response_mime_type: str =
                 raise Exception(f"[Key used: {masked_key}] Gemini API Error: {error_msg}")
 
 def get_embeddings(text: str):
-    """Fetches a single embedding. We use this in a loop to avoid the deprecated batch endpoint."""
-    api_key = get_clean_key()
+    client = genai.Client(api_key=get_clean_key())
 
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={api_key}"
-    headers = {"Content-Type": "application/json"}
+    response = client.models.embed_content(
+        model="gemini-embedding-2",
+        contents=text.strip()
+    )
 
-    payload = {
-        "model": "models/text-embedding-004",
-        "content": {"parts": [{"text": text.strip()}]}
-    }
-    
-    response = requests.post(url, headers=headers, json=payload)
-
-    if not response.ok:
-        masked_key = f"{api_key[:4]}...{api_key[-4:]}"
-        raise Exception(f"[Key used: {masked_key}] Embedding API Error: {response.text}")
-
-    return response.json()["embedding"]["values"]
+    return response.embeddings[0].values
 
 @app.get("/")
 def read_root():
