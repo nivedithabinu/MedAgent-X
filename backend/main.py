@@ -328,26 +328,3 @@ async def export_ppt(req: DocRequest):
     except Exception as e:
         traceback.print_exc()
         raise HTTPException(status_code=500, detail="Export Failed")
-
-from fastapi import APIRouter
-@app.get("/api/test-gemini")
-def test_gemini():
-    try:
-        api_key = get_clean_key()
-        client = genai.Client(api_key=api_key)
-
-        response = client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents="Reply with exactly: OK"
-        )
-
-        return {
-            "status": "success",
-            "response": response.text
-        }
-
-    except Exception as e:
-        return {
-            "status": "failed",
-            "error": str(e)
-        }
