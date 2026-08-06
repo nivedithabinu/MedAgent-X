@@ -97,7 +97,14 @@ def generate_with_retry(prompt: str, instruction: str, response_mime_type: str =
                 raise Exception(f"[Key used: {masked_key}] Gemini API Error: {error_msg}")
 
 def get_embeddings(text: str):
-    client = genai.Client(api_key=get_clean_key())
+    api_key = get_clean_key()
+
+    print("="*50)
+    print("KEY PREFIX:", api_key[:5])
+    print("KEY LENGTH:", len(api_key))
+    print("="*50)
+
+    client = genai.Client(api_key=api_key)
 
     response = client.models.embed_content(
         model="gemini-embedding-2",
