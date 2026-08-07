@@ -271,11 +271,26 @@ async def chat_with_agent(req: QueryRequest):
         top_indices = np.argsort(similarities)[-4:][::-1]
         relevant_context = "\n\n...\n\n".join([doc_data["chunks"][i] for i in top_indices])
         
-        prompt = f"User Query: {req.query}\n\nRelevant Document Context:\n{relevant_context}"
-        instruction = """You are MedAgent-X, an advanced Clinical AI assistant.
+        prompt = f"""
+        You are analyzing the uploaded medical paper.
+        Filename:{doc_data['filename']}
+        The following text is extracted ONLY from this uploaded paper.
+        ==========================
+        {relevant_context}
+        ==========================
+        User Question:{req.query}
+        IMPORTANT:
+        - Answer ONLY using the uploaded document.
+        - If the answer is not found, explicitly say it is not present.
+        - Never answer from your own knowledge.
+        - Cite [PAGE X] whenever possible."""
+        
+        instruction = """
+        You are MedAgent-X, an advanced Clinical AI assistant.
         1. If the query relates to the provided Document Context, answer using the context and explicitly cite the [PAGE X] markers.
         2. If the query is a general question (e.g., coding, math, casual conversation), ignore the document and answer using your broad general knowledge.
-        3. Always be professional, clear, and highly helpful."""
+        3. Always be professional, clear, and highly helpful.
+        """
         
         reply_text = ai_service.generate_content(prompt, instruction)
 
