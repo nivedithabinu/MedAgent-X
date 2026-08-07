@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 from pypdf import PdfReader
 from fastapi.responses import StreamingResponse
 from pptx import Presentation
+from google.genai import types
 
 load_dotenv(override=True)
 
@@ -51,67 +52,67 @@ def get_clean_key():
     return clean_key
 
 def generate_with_retry(prompt: str, instruction: str, response_mime_type: str = "text/plain"):
-    api_key = get_clean_key()
-
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
-    headers = {"Content-Type": "application/json"}
-
-    payload = {
-        "systemInstruction": {"parts": [{"text": instruction}]},
-        "contents": [{"parts": [{"text": prompt}]}],
-        "safetySettings": [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"}
-        ],
-
-        "generationConfig": {"temperature": 0.2, "responseMimeType": response_mime_type}
-    }
+    client = get_genai_client()
     
-    for attempt in range(3):
-        try:
-            res = requests.post(url, json=payload, headers=headers)
+    config = types.GenerateContentConfig(
+        system_instruction=instruction,
+        temperature=0.2,
+        response_mime_type=response_mime_type,
+        safety_settings=[
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+                threshold=types.HarmBlockThreshold.BLOCK_NONE,
+            ),
             
-            if res.status_code == 429:
-                time.sleep(5 * (attempt + 1))
-                continue
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+                threshold=types.HarmBlockThreshold.BLOCK_NONE,
+            ),
             
-            res.raise_for_status()
-            data = res.json()
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+                threshold=types.HarmBlockThreshold.BLOCK_NONE,
+            ),
             
-            candidates = data.get("candidates", [])
-            if not candidates:
-                return AIResponse("Analysis unavailable due to content filtering or empty response from API.")
-                
-            text_content = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
-            if not text_content:
-                 return AIResponse("No text content returned from the API.")
-
-            return AIResponse(text_content)
-            
-        except Exception as e:
-            if attempt == 2:
-                masked_key = f"{api_key[:4]}...{api_key[-4:]}" if api_key else "NONE"
-                error_msg = res.text if 'res' in locals() and hasattr(res, 'text') else str(e)
-                raise Exception(f"[Key used: {masked_key}] Gemini API Error: {error_msg}")
-
-def get_embeddings(text: str):
-    api_key = get_clean_key()
-
-    print("="*50)
-    print("KEY PREFIX:", api_key[:5])
-    print("KEY LENGTH:", len(api_key))
-    print("="*50)
-
-    client = genai.Client(api_key=api_key)
-
-    response = client.models.embed_content(
-        model="gemini-embedding-2",
-        contents=text.strip()
+            types.SafetySetting(
+                category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+                threshold=types.HarmBlockThreshold.BLOCK_NONE,
+            ),
+        ]
     )
 
-    return response.embeddings[0].values
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=config
+        )
+        
+        return response
+        
+    except Exception as e:
+        error_msg = str(e)
+        masked_key = f"{get_clean_key()[:4]}...{get_clean_key()[-4:]}"
+        raise Exception(f"[Key used: {masked_key}] Gemini Generation Error: {error_msg}")
+
+def get_embeddings(text: list[str]):
+    if not text:
+        return []
+
+    client = get_genai_client()
+    contents = [types.Content(parts=[types.Part.from_text(text=t)]) for t in text]
+
+    try:
+        result = client.models.embed_content(
+            model="gemini-embedding-2",
+            contents=contents
+        )
+        
+        return [np.array(emb.values) for emb in result.embeddings]
+        
+    except Exception as e:
+        masked_key = f"{get_clean_key()[:4]}...{get_clean_key()[-4:]}"
+        raise Exception(f"[Key used: {masked_key}] Embedding SDK Error: {str(e)}")
 
 @app.get("/")
 def read_root():
