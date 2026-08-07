@@ -1,10 +1,8 @@
 fastapi
-uvicorn
-google-genai
-pydantic
+uvicorn[standard]
 python-multipart
-pypdf
 python-dotenv
-numpy
+pypdf
 python-pptx
-requests
+numpy
+google-genai
