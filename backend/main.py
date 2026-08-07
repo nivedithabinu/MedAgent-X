@@ -6,8 +6,8 @@ import uuid
 import logging
 import traceback
 import numpy as np
-from typing import List, Dict, Any, Optional
 
+from typing import List, Dict, Any, Optional
 from google import genai
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -150,7 +150,7 @@ class AIService:
         for attempt in range(3):
             try:
                 response = self.client.models.embed_content(
-                    model="gemini-embedding-2",
+                    model="gemini-embedding-001",
                     contents=text.strip()
                 )
 
