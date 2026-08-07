@@ -242,6 +242,14 @@ async def upload_pdf(file: UploadFile = File(...)):
         doc_id = str(uuid.uuid4())
         db.save_document(doc_id, chunks, embeddings, full_text[:25000], file.filename, len(pdf.pages))
 
+        print("="*70)
+        print("DOCUMENT SAVED")
+        print("doc_id:", doc_id)
+        print("filename:", file.filename)
+        print("documents stored:", len(db._store))
+        print("keys:", list(db._store.keys()))
+        print("="*70)
+
         return {
             "doc_id": doc_id, 
             "filename": file.filename, 
@@ -258,6 +266,14 @@ async def upload_pdf(file: UploadFile = File(...)):
 @app.post("/api/chat")
 async def chat_with_agent(req: QueryRequest):
     doc_data = db.get_document(req.doc_id)
+
+    print("="*70)
+    print("CHAT REQUEST")
+    print("requested", req.doc_id)
+    print("available:", list(db._store.keys()))
+    print("retrieved:", doc_data["filename"] if doc_data else None)
+    print("="*70)
+
     if not doc_data:
         raise HTTPException(status_code=404, detail="Session expired. Please re-upload the document.")
     
@@ -291,7 +307,7 @@ async def chat_with_agent(req: QueryRequest):
         2. If the query is a general question (e.g., coding, math, casual conversation), ignore the document and answer using your broad general knowledge.
         3. Always be professional, clear, and highly helpful.
         """
-        
+
         reply_text = ai_service.generate_content(prompt, instruction)
 
         return {"reply": reply_text}
