@@ -1,104 +1,83 @@
 # 🩺 MedAgent-X
 
-> **An Agentic AI Research Assistant powered by Retrieval-Augmented Generation (RAG)**
+> **An AI-powered medical research assistant for understanding clinical documents**
 
-MedAgent-X is a full-stack AI application designed to accelerate clinical research. Instead of manually navigating hundreds of pages, researchers can upload a clinical PDF, ask questions in the chatbot, generate knowledge graphs, and export AI-generated presentation slides.
+MedAgent-X is a full-stack AI application that helps users understand and explore medical research papers more efficiently.
 
----
-
-## 🚀 Key Features
-
-### 📄 Intelligent PDF Processing
-
-- Upload clinical research papers in PDF format.
-- Robust document parsing using **PyPDF** with defensive error handling.
-- Automatically extracts and processes textual content from complex academic papers.
+Users can upload a clinical PDF, ask questions about its content, and use AI to generate summaries, visual knowledge graphs, and presentation slides. The application uses a **Retrieval-Augmented Generation (RAG)** approach to retrieve relevant information from the uploaded document before generating responses.
 
 ---
 
-### 🤖 AI-Powered Research Chat
+## 🚀 Features
 
-- Ask questions about uploaded research papers.
-- Uses a custom **Retrieval-Augmented Generation (RAG)** pipeline.
-- Retrieves the most relevant document chunks before generating responses.
-- Explicitly cites the corresponding **page number** for every answer.
+### 📄 PDF Document Analysis
 
-### 🧠 Knowledge Graph Generation
+- Upload medical and clinical research papers in PDF format.
+- Automatically extract text from uploaded documents.
+- Process documents into smaller sections for efficient information retrieval.
+- Validate uploaded documents to ensure they are relevant to the medical domain.
 
-Automatically converts unstructured medical findings into interactive **Mermaid.js** dependency graphs for better understanding.
+### 🤖 AI Research Chat
 
----
+- Ask questions directly about an uploaded research paper.
+- Retrieve relevant sections of the document before generating an answer.
+- Responses are grounded in the uploaded document.
+- Includes **page references** to help users locate the information in the original paper.
 
-### 📊 AI Presentation Generator
+### 🧠 Knowledge Graph
 
-Generate a presentation summarizing the uploaded paper, with the option of converting the slides into a .PPTX file.
+- Generate an interactive **Mermaid.js mind map** from the uploaded document.
+- Organizes important concepts, symptoms, diagnoses, treatments, and other relationships.
+- Helps users understand complex medical information visually.
 
----
+### 📊 Presentation Generator
 
-# ✨ Architectural Highlights
-
-## 🔍 Domain Verification
-The application automatically rejects non-medical PDFs using LLM-based classification, ensuring that only domain-specific research papers are accepted.
-
----
-
-## 🧮 Custom Vector Search Engine
-
-Instead of relying on external vector databases, MedAgent-X implements an in-memory semantic retrieval engine using NumPy.
-MedAgent-X includes a defensive extraction pipeline using extensive exception handling that gracefully skips problematic pages without interrupting document processing.
+- Automatically generate presentation slides from a research paper.
+- Converts important findings and concepts into concise slide content.
+- Export the generated presentation as a **PowerPoint (.pptx)** file.
 
 ---
 
-## 📑 Structured LLM Output
+## 🛠️ Tech Stack
 
-Rather than accepting free-form AI responses, MedAgent-X prompts the LLM to generate structured JSON.
-This predictable schema is directly mapped into PowerPoint templates using **python-pptx**, enabling reliable presentation generation.
+### 🎨 Frontend
 
----
+The frontend provides the interactive interface for uploading documents, viewing PDFs, chatting with the AI, exploring generated graphs, and creating presentations.
 
-## ⚙ Stateless Backend Design
-
-- Frontend hosted on **Vercel**
-- Backend deployed on **Render**
-- Communication exclusively through REST APIs
-- No Google Cloud SDK dependencies
-- Raw Gemini REST implementation for lightweight deployment
+- **HTML**
+- **CSS**
+- **JavaScript** - Frontend logic and API integration
+- **PDF.js** - PDF rendering and page navigation
+- **Mermaid.js** - Interactive knowledge graph visualization
 
 ---
 
-# 🛠 Tech Stack
+### ⚙️ Backend
 
-## Frontend
+The backend handles document processing, API requests, semantic retrieval, and AI-powered operations.
 
-- Vanilla JavaScript
-- Tailwind CSS
-- PDF.js
-- Mermaid.js
-
----
-
-## Backend
-
-- Python
-- FastAPI
-- NumPy
-- PyPDF
-- python-pptx
+- **Python** - Core backend language
+- **FastAPI** - REST API and backend services
+- **NumPy** - Embeddings and custom similarity search
+- **PyPDF** - PDF text extraction
+- **python-pptx** - PowerPoint presentation generation
 
 ---
 
-## AI
+### 🤖 AI & RAG
 
-- Google Gemini 2.5 Flash API
-- Retrieval-Augmented Generation (RAG)
-- Custom Semantic Search
-- Prompt Engineering
+The AI pipeline processes uploaded documents and retrieves relevant information before generating responses.
 
----
-
-## Deployment
-
-- Vercel (Frontend)
-- Render (Backend)
+- **Google Gemini** - AI-powered content generation
+- **Retrieval-Augmented Generation (RAG)** - Document-grounded question answering
+- **Embeddings** - Represent document content for semantic retrieval
+- **Semantic Search** - Finds relevant sections of uploaded documents
+- **Prompt Engineering** - Structures context and AI responses
 
 ---
+
+### ☁️ Deployment
+
+- **Vercel** - Frontend
+- **Render** - Backend
+- **REST APIs** - Communication between frontend and backend
